@@ -2,6 +2,12 @@ import streamlit as st
 import plotly.express as px
 from analyzer import analyze_headline
 from utils import get_stock_data
+from login import login_page
+
+# --- Login check ---
+if "logged_in" not in st.session_state or not st.session_state["logged_in"]:
+    login_page()
+    st.stop()
 
 st.set_page_config(page_title="Fake News Impact Simulator", layout="wide")
 
