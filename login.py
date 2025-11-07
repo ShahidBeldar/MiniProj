@@ -12,7 +12,7 @@ USER_CREDENTIALS = {
 def login_page():
     st.set_page_config(
         page_title="Login | Finance News Simulator",
-        page_icon="💼",
+        page_icon="🔒",
         layout="centered",
         initial_sidebar_state="collapsed"
     )
@@ -36,7 +36,7 @@ def login_page():
                 border: 1px solid #ddd;
                 border-radius: 10px;
                 box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-                padding: 2.5rem 2rem; /* More spacious padding */
+                padding: 2.5rem 2rem;
             }
             
             /* Constrain the width of the login box */
@@ -48,48 +48,69 @@ def login_page():
             /* --- Custom Title Styles --- */
             .login-title {
                 text-align: center;
-                font-size: 2rem;
-                font-weight: 600;
+                font-size: 1.8rem; /* Slightly smaller for the longer title */
+                font-weight: 700;
                 color: #1a1a1a;
                 margin-bottom: 0.5rem;
             }
             
             .login-subtitle {
                 text-align: center;
-                color: #666;
+                color: #555;
                 margin-bottom: 2rem;
             }
+            
+            /* --- Forgot Password Link Style --- */
+            .forgot-link-container {
+                text-align: right;
+                margin-top: -10px; /* Pull it up slightly */
+                margin-bottom: 1rem;
+            }
+            .forgot-link {
+                font-size: 0.9rem;
+                color: #007bff; /* Standard link color */
+                text-decoration: none;
+            }
+            .forgot-link:hover {
+                text-decoration: underline;
+            }
+
         </style>
     """, unsafe_allow_html=True)
 
     # --- Login Box Layout ---
     with st.container(border=True):
-        st.markdown('<div class="login-title">💼 Welcome Back</div>', unsafe_allow_html=True)
-        st.markdown('<div class="login-subtitle">Login to the Finance News Simulator</div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-title">🔒 Finance News Impact Simulator</div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-subtitle">Please log in to access the dashboard</div>', unsafe_allow_html=True)
 
         username = st.text_input(
             "Username",
             placeholder="Username (e.g., admin)",
-            label_visibility="collapsed" # Hides the label, uses placeholder
+            label_visibility="collapsed"
         )
         password = st.text_input(
             "Password",
             placeholder="Password (e.g., 1234)",
             type="password",
-            label_visibility="collapsed" # Hides the label
+            label_visibility="collapsed"
         )
 
-        st.write("") # Add a little space
-        
+        # --- "Forgot Password?" Link ---
+        # This is just a visual placeholder for a real app
+        st.markdown(
+            '<div class="forgot-link-container"><a href="#" target="_self" class="forgot-link">Forgot Password?</a></div>', 
+            unsafe_allow_html=True
+        )
+
         login_btn = st.button("Login", use_container_width=True, type="primary")
 
         if login_btn:
             if username in USER_CREDENTIALS and USER_CREDENTIALS[username] == password:
                 st.session_state["logged_in"] = True
                 st.session_state["username"] = username
-                st.success(f"Welcome, {username}! Redirecting...")
-                time.sleep(1) # Short delay
-                st.rerun() # Use st.rerun() (preferred over experimental_rerun)
+                st.success(f"Login successful! Redirecting...")
+                time.sleep(1)
+                st.rerun()
             else:
                 st.error("Invalid username or password.")
 
@@ -116,7 +137,6 @@ def main_app_page():
 
     st.title("📈 Finance News Impact Simulator")
     st.write("This is your main application dashboard.")
-    st.text_input("Enter a news headline to analyze:")
     # ... Add your main app components here ...
 
 
