@@ -1,0 +1,8 @@
+streamlit
+pandas
+#textblob
+scikit-learn
+yfinance
+plotly
+transformers
+torch
