@@ -2,6 +2,8 @@ import streamlit as st
 import time
 
 # --- Simple user database (for demo) ---
+# NOTE: With the demo credentials box removed,
+# you must know these to log in.
 USER_CREDENTIALS = {
     "admin": "1234",
     "user": "password",
@@ -12,7 +14,7 @@ USER_CREDENTIALS = {
 def login_page():
     st.set_page_config(
         page_title="Login | Finance News Simulator",
-        page_icon="🔒",
+        page_icon="📈",  # Changed to a more relevant icon
         layout="centered",
         initial_sidebar_state="collapsed"
     )
@@ -48,7 +50,7 @@ def login_page():
             /* --- Custom Title Styles --- */
             .login-title {
                 text-align: center;
-                font-size: 1.8rem; /* Slightly smaller for the longer title */
+                font-size: 1.8rem;
                 font-weight: 700;
                 color: #1a1a1a;
                 margin-bottom: 0.5rem;
@@ -59,48 +61,28 @@ def login_page():
                 color: #555;
                 margin-bottom: 2rem;
             }
-            
-            /* --- Forgot Password Link Style --- */
-            .forgot-link-container {
-                text-align: right;
-                margin-top: -10px; /* Pull it up slightly */
-                margin-bottom: 1rem;
-            }
-            .forgot-link {
-                font-size: 0.9rem;
-                color: #007bff; /* Standard link color */
-                text-decoration: none;
-            }
-            .forgot-link:hover {
-                text-decoration: underline;
-            }
-
         </style>
     """, unsafe_allow_html=True)
 
     # --- Login Box Layout ---
     with st.container(border=True):
-        st.markdown('<div class="login-title">🔒 Finance News Impact Simulator</div>', unsafe_allow_html=True)
-        st.markdown('<div class="login-subtitle">Please log in to access the dashboard</div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-title">📈 Finance News Impact Simulator</div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-subtitle">Access your financial news analysis dashboard</div>', unsafe_allow_html=True)
 
         username = st.text_input(
             "Username",
-            placeholder="Username (e.g., admin)",
+            placeholder="Username",
             label_visibility="collapsed"
         )
         password = st.text_input(
             "Password",
-            placeholder="Password (e.g., 1234)",
+            placeholder="Password",
             type="password",
             label_visibility="collapsed"
         )
-
-        # --- "Forgot Password?" Link ---
-        # This is just a visual placeholder for a real app
-        st.markdown(
-            '<div class="forgot-link-container"><a href="#" target="_self" class="forgot-link">Forgot Password?</a></div>', 
-            unsafe_allow_html=True
-        )
+        
+        # Add a little space before the button
+        st.write("") 
 
         login_btn = st.button("Login", use_container_width=True, type="primary")
 
@@ -113,17 +95,6 @@ def login_page():
                 st.rerun()
             else:
                 st.error("Invalid username or password.")
-
-    # --- Demo Credentials Info Box ---
-    st.info(
-        "**Demo Credentials:**\n\n"
-        "| Username | Password |\n"
-        "| :--- | :--- |\n"
-        "| `admin` | `1234` |\n"
-        "| `user` | `password` |\n"
-        "| `guest` | `guest123` |",
-        icon="🔑"
-    )
 
 # --- Main App Page Function (Placeholder) ---
 def main_app_page():
