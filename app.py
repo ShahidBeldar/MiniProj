@@ -11,11 +11,11 @@ if "logged_in" not in st.session_state or not st.session_state["logged_in"]:
 
 st.set_page_config(page_title="Fake News Impact Simulator", layout="wide")
 
-st.title(" Fake News Impact Simulator with Stock Charts")
-st.markdown("Enter a fake news headline and choose a stock to simulate its impact.")
+st.title("News Impact Simulator with Stock Charts")
+st.markdown("Enter a news headline and choose a stock to simulate its impact.")
 
 # --- Inputs ---
-user_input = st.text_area(" Enter Fake News Headline")
+user_input = st.text_area(" Enter  News Headline")
 ticker = st.text_input(" Enter Stock Ticker (e.g., TSLA, AAPL, INFY.NS, RELIANCE.NS)", "TSLA")
 period = st.selectbox(" Time Period", ["1mo", "3mo", "6mo", "1y", "2y"], index=2)
 
