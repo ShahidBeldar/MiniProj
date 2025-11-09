@@ -27,15 +27,14 @@ if "favorites" not in st.session_state:
 
 def show_analysis_progress():
     statuses = [
-        "Analyzing headline sentiment...",
-        "Fetching market data...",
+        "Analyzing headline sentiment and Fetching market data",
         "Computing AI predictions...",
         "Calculating impact scores...",
         "Finalizing results..."
     ]
     for status in statuses:
         with st.spinner(status):
-            time.sleep(1.1)
+            time.sleep(2.1)
 
 # --- THEME TOGGLE FUNCTION ---
 def toggle_theme():
