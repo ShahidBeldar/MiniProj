@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from analyzer import analyze_headline
 from utils import get_stock_data
 from login import login_page
+import time
+
 
 # --- PAGE CONFIGURATION (Must be first) ---
 st.set_page_config(
@@ -22,6 +24,18 @@ if "analysis_history" not in st.session_state:
     st.session_state["analysis_history"] = []
 if "favorites" not in st.session_state:
     st.session_state["favorites"] = []
+
+def show_analysis_spinner():
+    statuses = [
+        "Analyzing headline sentiment...",
+        "Fetching market data...",
+        "Computing AI predictions...",
+        "Calculating impact scores...",
+        "Finalizing results..."
+    ]
+    for status in statuses:
+        with st.spinner(status):
+            time.sleep(0.6)
 
 # --- THEME TOGGLE FUNCTION ---
 def toggle_theme():
