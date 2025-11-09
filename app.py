@@ -309,7 +309,7 @@ analyze_button = st.button("Run Analysis", type="primary", use_container_width=F
 
 # --- ANALYSIS & RESULTS ---
 if analyze_button and headline_input.strip():
-    show_analysis_progress()
+   show_analysis_progress()
         try:
             # 1. Run Analysis
             result = analyze_headline(headline_input)
