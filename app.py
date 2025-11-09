@@ -305,13 +305,11 @@ headline_input = st.text_area(
     help="Enter any financial news headline to analyze its potential market impact"
 )
 
-analyze_button = st.button("Run Simulation", type="primary", use_container_width=False)
+analyze_button = st.button("Run Analysis", type="primary", use_container_width=False)
 
 # --- ANALYSIS & RESULTS ---
 if analyze_button and headline_input.strip():
-    st.divider()
-    
-    with st.spinner("Running AI Sentiment Analysis & Fetching Market Data..."):
+    show_analysis_progress()
         try:
             # 1. Run Analysis
             result = analyze_headline(headline_input)
