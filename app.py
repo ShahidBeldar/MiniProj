@@ -25,7 +25,7 @@ if "analysis_history" not in st.session_state:
 if "favorites" not in st.session_state:
     st.session_state["favorites"] = []
 
-def show_analysis_spinner():
+def show_analysis_progress():
     statuses = [
         "Analyzing headline sentiment...",
         "Fetching market data...",
