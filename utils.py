@@ -15,12 +15,69 @@ def get_sentiment_model():
     return pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
 
 # ============================================
-# DATA LOADING
+# DATA LOADING (Fixed for different column names)
 # ============================================
 
 def load_data(filepath):
-    """Load CSV data"""
-    return pd.read_csv(filepath)
+    """
+    Load CSV data and automatically detect the headline column.
+    Handles different column names: Headline, headline, title, Title, news, etc.
+    """
+    df = pd.read_csv(filepath)
+    
+    print(f"📋 CSV columns found: {df.columns.tolist()}")
+    
+    # List of possible column names for headlines
+    possible_headline_cols = [
+        'Headline', 'headline', 'HEADLINE',
+        'Title', 'title', 'TITLE',
+        'News', 'news', 'NEWS',
+        'Text', 'text', 'TEXT',
+        'Description', 'description', 'DESCRIPTION',
+        'Article', 'article'
+    ]
+    
+    # Find the headline column
+    headline_col = None
+    for col in possible_headline_cols:
+        if col in df.columns:
+            headline_col = col
+            break
+    
+    # Rename to 'Headline' for consistency
+    if headline_col:
+        if headline_col != 'Headline':
+            df = df.rename(columns={headline_col: 'Headline'})
+        print(f"✅ Using column '{headline_col}' as Headline")
+    else:
+        # Use first text column as fallback
+        text_columns = df.select_dtypes(include=['object']).columns
+        if len(text_columns) > 0:
+            df = df.rename(columns={text_columns[0]: 'Headline'})
+            print(f"⚠️ No standard headline column found. Using '{text_columns[0]}'")
+        else:
+            raise KeyError(
+                f"❌ Could not find a headline column!\n"
+                f"Available columns: {df.columns.tolist()}\n"
+                f"Please ensure your CSV has a column like 'Headline', 'Title', or 'News'"
+            )
+    
+    # Handle Date column (optional)
+    possible_date_cols = ['Date', 'date', 'DATE', 'Time', 'time', 'Timestamp', 'timestamp', 'Published', 'published']
+    date_col = None
+    for col in possible_date_cols:
+        if col in df.columns:
+            date_col = col
+            break
+    
+    if date_col and date_col != 'Date':
+        df = df.rename(columns={date_col: 'Date'})
+        print(f"✅ Using column '{date_col}' as Date")
+    elif 'Date' not in df.columns:
+        df['Date'] = pd.Timestamp.now().strftime('%Y-%m-%d')
+        print("⚠️ No date column found. Added placeholder dates.")
+    
+    return df
 
 def get_stock_data(ticker, period="1y"):
     """Fetch stock data using yfinance"""
@@ -44,10 +101,17 @@ def compute_sentiment(df):
     if 'sentiment' in df.columns:
         return df  # Already computed
     
+    # Ensure Headline column exists
+    if 'Headline' not in df.columns:
+        raise KeyError(f"'Headline' column not found after loading. Available columns: {df.columns.tolist()}")
+    
     sentiment_model = get_sentiment_model()
     
     # Prepare headlines
     headlines = df['Headline'].fillna("").tolist()
+    
+    # Filter out empty headlines
+    headlines = [h if h.strip() else "neutral news" for h in headlines]
     
     # BATCH PROCESSING: Process 32 headlines at once (MUCH faster!)
     batch_size = 32
@@ -66,7 +130,7 @@ def compute_sentiment(df):
                 else:
                     sentiments.append(-result['score'])
         except Exception as e:
-            print(f"Error processing batch: {e}")
+            print(f"⚠️ Error processing batch: {e}")
             # Fill with neutral sentiment if batch fails
             sentiments.extend([0.0] * len(batch))
     
@@ -82,6 +146,10 @@ def compute_similarity(news_df, headline, top_n=10):
     Find most similar historical headlines using TF-IDF.
     Optimized to return only top N results.
     """
+    # Ensure Headline column exists
+    if 'Headline' not in news_df.columns:
+        raise KeyError(f"'Headline' column not found. Available columns: {news_df.columns.tolist()}")
+    
     # Combine all headlines with the query
     all_headlines = news_df['Headline'].fillna("").tolist() + [headline]
     
@@ -108,55 +176,6 @@ def compute_similarity(news_df, headline, top_n=10):
         return result_df.nlargest(top_n, 'similarity')
     
     except Exception as e:
-        print(f"Error computing similarity: {e}")
+        print(f"❌ Error computing similarity: {e}")
         # Return empty dataframe with required columns
         return pd.DataFrame(columns=['Date', 'Headline', 'sentiment', 'similarity'])
-
-
-# ============================================
-# OPTIONAL: Ultra-Fast Version (if you want <1s responses)
-# ============================================
-# Uncomment this section if you want even faster performance
-
-"""
-class FastSimilarityMatcher:
-    '''Pre-compute TF-IDF vectors for instant similarity search'''
-    
-    def __init__(self, news_df):
-        self.news_df = news_df.copy()
-        headlines = news_df['Headline'].fillna("").tolist()
-        
-        self.vectorizer = TfidfVectorizer(
-            max_features=5000,
-            stop_words='english',
-            ngram_range=(1, 2),
-            min_df=2
-        )
-        
-        self.tfidf_matrix = self.vectorizer.fit_transform(headlines)
-        print(f"✅ Pre-computed TF-IDF for {len(headlines)} headlines")
-    
-    def find_similar(self, headline, top_n=10):
-        '''Find similar headlines in <100ms'''
-        try:
-            query_vector = self.vectorizer.transform([headline])
-            similarity_scores = cosine_similarity(query_vector, self.tfidf_matrix).flatten()
-            
-            top_indices = similarity_scores.argsort()[-top_n:][::-1]
-            
-            result_df = self.news_df.iloc[top_indices].copy()
-            result_df['similarity'] = similarity_scores[top_indices]
-            
-            return result_df
-        except Exception as e:
-            print(f"Error: {e}")
-            return pd.DataFrame(columns=['Date', 'Headline', 'sentiment', 'similarity'])
-
-# To use FastSimilarityMatcher in analyzer.py:
-# 1. Import: from utils import FastSimilarityMatcher
-# 2. In analyzer.py, create cached matcher:
-#    @st.cache_resource
-#    def get_matcher(_news_df):
-#        return FastSimilarityMatcher(_news_df)
-# 3. Use: matched = matcher.find_similar(headline)
-"""
