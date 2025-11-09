@@ -85,6 +85,13 @@ def get_theme_css():
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 border: none;
             }
+            .section-header {
+                font-size: 1.5rem;
+                font-weight: 600;
+                color: #e2e8f0;
+                margin-top: 1.5rem;
+                margin-bottom: 1rem;
+            }
         </style>
         """
     else:
@@ -140,6 +147,13 @@ def get_theme_css():
                 color: white;
                 border: none;
             }
+            .section-header {
+                font-size: 1.5rem;
+                font-weight: 600;
+                color: #1e293b;
+                margin-top: 1.5rem;
+                margin-bottom: 1rem;
+            }
         </style>
         """
 
@@ -152,10 +166,10 @@ if "logged_in" not in st.session_state or not st.session_state["logged_in"]:
 
 # --- SIDEBAR CONFIGURATION ---
 with st.sidebar:
-    st.markdown("### ⚙️ Settings")
+    st.markdown("### Settings")
     
     # Theme Toggle
-    theme_label = "🌙 Dark Mode" if st.session_state["theme"] == "light" else "☀️ Light Mode"
+    theme_label = "Switch to Dark Mode" if st.session_state["theme"] == "light" else "Switch to Light Mode"
     if st.button(theme_label, use_container_width=True):
         toggle_theme()
         st.rerun()
@@ -163,7 +177,7 @@ with st.sidebar:
     st.divider()
     
     # Quick Access to Favorites
-    st.markdown("### ⭐ Favorite Tickers")
+    st.markdown("### Favorite Tickers")
     if st.session_state["favorites"]:
         for fav in st.session_state["favorites"]:
             col1, col2 = st.columns([3, 1])
@@ -171,20 +185,20 @@ with st.sidebar:
                 if st.button(fav, use_container_width=True, key=f"fav_{fav}"):
                     st.session_state["selected_ticker"] = fav
             with col2:
-                if st.button("✕", key=f"remove_{fav}"):
+                if st.button("×", key=f"remove_{fav}"):
                     st.session_state["favorites"].remove(fav)
                     st.rerun()
     else:
-        st.info("No favorites yet. Add tickers below!")
+        st.info("No favorites yet. Add tickers from the main form.")
     
     st.divider()
     
     # Analysis History
-    st.markdown("### 📊 Recent Analyses")
+    st.markdown("### Recent Analyses")
     if st.session_state["analysis_history"]:
         for i, hist in enumerate(st.session_state["analysis_history"][-5:]):
             with st.expander(f"{hist['ticker']} - {hist['timestamp'][:10]}"):
-                st.write(f"**Headline:** {hist['headline'][:50]}...")
+                st.write(f"**Headline:** {hist['headline'][:60]}...")
                 st.write(f"**Impact:** {hist['impact']}")
                 st.write(f"**Polarity:** {hist['polarity']:.2f}")
     else:
@@ -193,23 +207,25 @@ with st.sidebar:
     st.divider()
     
     # Export Options
-    st.markdown("### 💾 Export Data")
-    if st.button("📥 Download History (CSV)", use_container_width=True):
+    st.markdown("### Export Data")
+    if st.button("Download History as CSV", use_container_width=True):
         if st.session_state["analysis_history"]:
             df_history = pd.DataFrame(st.session_state["analysis_history"])
             csv = df_history.to_csv(index=False)
             st.download_button(
-                label="Download CSV",
+                label="Download CSV File",
                 data=csv,
                 file_name=f"analysis_history_{datetime.now().strftime('%Y%m%d')}.csv",
                 mime="text/csv",
                 use_container_width=True
             )
+        else:
+            st.warning("No history to export")
     
     st.divider()
     
     # About Section
-    with st.expander("ℹ️ About This App"):
+    with st.expander("About This Application"):
         st.markdown("""
         **Version:** 2.0  
         **Features:**
@@ -222,7 +238,7 @@ with st.sidebar:
         """)
 
 # --- TOP NAVIGATION BAR ---
-col_nav1, col_nav2, col_nav3 = st.columns([6, 2, 1])
+col_nav1, col_nav2 = st.columns([8, 1])
 with col_nav1:
     st.markdown('<div class="main-header">Finance News Impact Simulator</div>', unsafe_allow_html=True)
     st.markdown('<p class="sub-text">AI-powered sentiment analysis for real-time market impact prediction</p>', unsafe_allow_html=True)
@@ -230,14 +246,7 @@ with col_nav1:
 with col_nav2:
     st.write("")
     st.write("")
-    # Quick Stats
-    total_analyses = len(st.session_state["analysis_history"])
-    st.metric("Total Analyses", total_analyses, delta=None)
-
-with col_nav3:
-    st.write("")
-    st.write("")
-    if st.button("🚪 Logout", type="secondary", use_container_width=True):
+    if st.button("Logout", type="secondary", use_container_width=True):
         st.session_state["logged_in"] = False
         st.rerun()
 
@@ -245,8 +254,8 @@ st.divider()
 
 # --- CONFIGURATION SECTION ---
 with st.container():
-    st.markdown("### 🎯 Simulation Parameters")
-    config_col1, config_col2, config_col3, config_col4 = st.columns([2, 2, 2, 2])
+    st.markdown('<p class="section-header">Simulation Parameters</p>', unsafe_allow_html=True)
+    config_col1, config_col2, config_col3 = st.columns([3, 3, 3])
     
     with config_col1:
         ticker_default = st.session_state.get("selected_ticker", "TSLA")
@@ -271,52 +280,24 @@ with st.container():
             placeholder="e.g., SPY",
             help="Add a benchmark ticker for comparison"
         ).upper()
-    
-    with config_col4:
-        st.write("")
-        if st.button("⭐ Add to Favorites", use_container_width=True):
-            if ticker and ticker not in st.session_state["favorites"]:
-                st.session_state["favorites"].append(ticker)
-                st.success(f"Added {ticker} to favorites!")
-                st.rerun()
 
 # --- MAIN INPUT SECTION ---
-st.markdown("### 📰 News Analysis")
-input_col1, input_col2 = st.columns([5, 1])
+st.markdown('<p class="section-header">News Analysis</p>', unsafe_allow_html=True)
 
-with input_col1:
-    headline_input = st.text_area(
-        "Enter News Headline for Simulation", 
-        height=120, 
-        placeholder="e.g., Federal Reserve unexpectedly cuts interest rates by 50 basis points amid growing recession concerns...",
-        help="Enter any financial news headline to analyze its potential market impact"
-    )
+headline_input = st.text_area(
+    "Enter News Headline for Simulation", 
+    height=120, 
+    placeholder="e.g., Federal Reserve unexpectedly cuts interest rates by 50 basis points amid growing recession concerns...",
+    help="Enter any financial news headline to analyze its potential market impact"
+)
 
-with input_col2:
-    st.write("")
-    st.write("")
-    analyze_button = st.button("🚀 Run Simulation", type="primary", use_container_width=True)
-    
-    # Quick headline examples
-    if st.button("💡 Example 1", use_container_width=True):
-        st.session_state["example_headline"] = "Tesla announces breakthrough in battery technology, promising 50% cost reduction"
-        st.rerun()
-    
-    if st.button("💡 Example 2", use_container_width=True):
-        st.session_state["example_headline"] = "Major tech layoffs announced as company misses quarterly earnings expectations"
-        st.rerun()
-
-# Load example if selected
-if "example_headline" in st.session_state:
-    headline_input = st.session_state["example_headline"]
-    del st.session_state["example_headline"]
-    analyze_button = True
+analyze_button = st.button("Run Simulation", type="primary", use_container_width=False)
 
 # --- ANALYSIS & RESULTS ---
 if analyze_button and headline_input.strip():
     st.divider()
     
-    with st.spinner("🔍 Running AI Sentiment Analysis & Fetching Market Data..."):
+    with st.spinner("Running AI Sentiment Analysis & Fetching Market Data..."):
         try:
             # 1. Run Analysis
             result = analyze_headline(headline_input)
@@ -341,11 +322,11 @@ if analyze_button and headline_input.strip():
             
             # --- RESULTS TABS ---
             tab_impact, tab_technical, tab_comparison, tab_historical, tab_raw = st.tabs([
-                "📊 Market Impact", 
-                "📈 Technical Analysis", 
-                "⚖️ Comparison",
-                "🔍 Historical Context", 
-                "🗂️ Raw Data"
+                "Market Impact", 
+                "Technical Analysis", 
+                "Comparison",
+                "Historical Context", 
+                "Raw Data"
             ])
 
             with tab_impact:
@@ -367,11 +348,11 @@ if analyze_button and headline_input.strip():
                     delta_color = "off"
 
                 with kpi1:
-                    st.metric("🎯 Target Ticker", ticker)
+                    st.metric("Target Ticker", ticker)
                 
                 with kpi2:
                     st.metric(
-                        "😊 Sentiment Polarity", 
+                        "Sentiment Polarity", 
                         f"{polarity_val:.2f}",
                         delta=f"{abs(polarity_val):.2f}",
                         delta_color=delta_color
@@ -385,14 +366,169 @@ if analyze_button and headline_input.strip():
                     if stock_df is not None and len(stock_df) > 1:
                         price_change = ((stock_df['Close'].iloc[-1] - stock_df['Close'].iloc[0]) / stock_df['Close'].iloc[0]) * 100
                         st.metric(
-                            f"📊 {period} Change", 
+                            f"{period} Change", 
                             f"${stock_df['Close'].iloc[-1]:.2f}",
                             delta=f"{price_change:.2f}%"
                         )
+                
+                st.divider()
+                
+                # --- TRADING INSIGHTS SECTION ---
+                if stock_df is not None and len(stock_df) >= 20:
+                    st.markdown("#### Trading Insights & Risk Assessment")
+                    
+                    # Calculate additional metrics
+                    returns = stock_df['Close'].pct_change().dropna()
+                    current_price = stock_df['Close'].iloc[-1]
+                    
+                    # Calculate support and resistance levels
+                    high_52w = stock_df['High'].tail(252).max() if len(stock_df) >= 252 else stock_df['High'].max()
+                    low_52w = stock_df['Low'].tail(252).min() if len(stock_df) >= 252 else stock_df['Low'].min()
+                    
+                    # Bollinger Bands
+                    rolling_mean = stock_df['Close'].rolling(window=20).mean().iloc[-1]
+                    rolling_std = stock_df['Close'].rolling(window=20).std().iloc[-1]
+                    upper_band = rolling_mean + (2 * rolling_std)
+                    lower_band = rolling_mean - (2 * rolling_std)
+                    
+                    # Risk metrics
+                    daily_volatility = returns.std()
+                    sharpe_ratio = (returns.mean() / returns.std() * (252 ** 0.5)) if returns.std() != 0 else 0
+                    max_drawdown = ((stock_df['Close'] / stock_df['Close'].cummax()) - 1).min() * 100
+                    
+                    # Momentum indicators
+                    momentum_5d = ((current_price - stock_df['Close'].iloc[-6]) / stock_df['Close'].iloc[-6] * 100) if len(stock_df) >= 6 else 0
+                    momentum_20d = ((current_price - stock_df['Close'].iloc[-21]) / stock_df['Close'].iloc[-21] * 100) if len(stock_df) >= 21 else 0
+                    
+                    insight_col1, insight_col2, insight_col3 = st.columns(3)
+                    
+                    with insight_col1:
+                        st.markdown("**Price Levels**")
+                        st.metric("52-Week High", f"${high_52w:.2f}")
+                        st.metric("52-Week Low", f"${low_52w:.2f}")
+                        st.metric("Upper Bollinger Band", f"${upper_band:.2f}")
+                        st.metric("Lower Bollinger Band", f"${lower_band:.2f}")
+                        
+                        # Distance from bands
+                        distance_upper = ((upper_band - current_price) / current_price) * 100
+                        distance_lower = ((current_price - lower_band) / current_price) * 100
+                        st.caption(f"Distance to Upper: {distance_upper:.1f}%")
+                        st.caption(f"Distance to Lower: {distance_lower:.1f}%")
+                    
+                    with insight_col2:
+                        st.markdown("**Risk Metrics**")
+                        st.metric("Daily Volatility", f"{daily_volatility*100:.2f}%")
+                        st.metric("Annualized Volatility", f"{daily_volatility*100*(252**0.5):.2f}%")
+                        st.metric("Sharpe Ratio", f"{sharpe_ratio:.2f}")
+                        st.metric("Max Drawdown", f"{max_drawdown:.2f}%")
+                        
+                        # Risk interpretation
+                        if daily_volatility < 0.015:
+                            risk_level = "Low Risk"
+                        elif daily_volatility < 0.025:
+                            risk_level = "Moderate Risk"
+                        else:
+                            risk_level = "High Risk"
+                        st.caption(f"Risk Level: {risk_level}")
+                    
+                    with insight_col3:
+                        st.markdown("**Momentum Indicators**")
+                        st.metric("5-Day Momentum", f"{momentum_5d:.2f}%", delta=f"{momentum_5d:.2f}%")
+                        st.metric("20-Day Momentum", f"{momentum_20d:.2f}%", delta=f"{momentum_20d:.2f}%")
+                        
+                        # Trend analysis
+                        ma_20 = stock_df['Close'].rolling(window=20).mean().iloc[-1]
+                        ma_50 = stock_df['Close'].rolling(window=50).mean().iloc[-1] if len(stock_df) >= 50 else ma_20
+                        
+                        if current_price > ma_20 and ma_20 > ma_50:
+                            trend = "Strong Uptrend"
+                        elif current_price > ma_20:
+                            trend = "Uptrend"
+                        elif current_price < ma_20 and ma_20 < ma_50:
+                            trend = "Strong Downtrend"
+                        else:
+                            trend = "Downtrend"
+                        
+                        st.metric("Current Trend", trend)
+                        st.metric("20-Day MA", f"${ma_20:.2f}")
+                        st.metric("50-Day MA", f"${ma_50:.2f}")
+                    
+                    st.divider()
+                    
+                    # Trading Recommendation based on sentiment + technicals
+                    st.markdown("#### AI-Powered Trading Recommendation")
+                    
+                    recommendation_score = 0
+                    reasons = []
+                    
+                    # Sentiment factor
+                    if polarity_val > 0.3:
+                        recommendation_score += 2
+                        reasons.append("Strong positive sentiment detected")
+                    elif polarity_val > 0:
+                        recommendation_score += 1
+                        reasons.append("Positive sentiment detected")
+                    elif polarity_val < -0.3:
+                        recommendation_score -= 2
+                        reasons.append("Strong negative sentiment detected")
+                    elif polarity_val < 0:
+                        recommendation_score -= 1
+                        reasons.append("Negative sentiment detected")
+                    
+                    # Technical factors
+                    if momentum_20d > 5:
+                        recommendation_score += 1
+                        reasons.append("Strong positive momentum")
+                    elif momentum_20d < -5:
+                        recommendation_score -= 1
+                        reasons.append("Negative momentum")
+                    
+                    if current_price > upper_band:
+                        recommendation_score -= 1
+                        reasons.append("Price above upper Bollinger Band (overbought)")
+                    elif current_price < lower_band:
+                        recommendation_score += 1
+                        reasons.append("Price below lower Bollinger Band (oversold)")
+                    
+                    if sharpe_ratio > 1.0:
+                        recommendation_score += 1
+                        reasons.append("Favorable risk-adjusted returns")
+                    
+                    # Final recommendation
+                    rec_col1, rec_col2 = st.columns([1, 2])
+                    
+                    with rec_col1:
+                        if recommendation_score >= 3:
+                            recommendation = "STRONG BUY"
+                            rec_color = "#10b981"
+                        elif recommendation_score >= 1:
+                            recommendation = "BUY"
+                            rec_color = "#34d399"
+                        elif recommendation_score <= -3:
+                            recommendation = "STRONG SELL"
+                            rec_color = "#ef4444"
+                        elif recommendation_score <= -1:
+                            recommendation = "SELL"
+                            rec_color = "#f87171"
+                        else:
+                            recommendation = "HOLD"
+                            rec_color = "#f59e0b"
+                        
+                        st.markdown(f"<h2 style='color: {rec_color}; text-align: center;'>{recommendation}</h2>", unsafe_allow_html=True)
+                        st.caption(f"Confidence Score: {abs(recommendation_score)}/5")
+                    
+                    with rec_col2:
+                        st.markdown("**Key Factors:**")
+                        for reason in reasons:
+                            st.markdown(f"• {reason}")
+                        
+                        st.markdown("**Disclaimer:** This recommendation is based on AI analysis and should not be considered financial advice. Always conduct your own research and consult with a financial advisor before making investment decisions.")
+
+                st.divider()
 
                 # --- Enhanced Stock Chart with Volume ---
                 if stock_df is not None:
-                    st.markdown("#### 📈 Price & Volume Trend")
+                    st.markdown("#### Price & Volume Trend")
                     
                     # Create subplots with secondary y-axis
                     fig = make_subplots(
@@ -470,7 +606,7 @@ if analyze_button and headline_input.strip():
                     st.plotly_chart(fig, use_container_width=True)
                     
                     # Key Statistics
-                    st.markdown("#### 📊 Key Statistics")
+                    st.markdown("#### Key Statistics")
                     stat_col1, stat_col2, stat_col3, stat_col4, stat_col5 = st.columns(5)
                     
                     with stat_col1:
@@ -486,11 +622,11 @@ if analyze_button and headline_input.strip():
                         volatility = stock_df['Close'].pct_change().std() * 100
                         st.metric("Volatility", f"{volatility:.2f}%")
                 else:
-                    st.error(f"❌ Could not fetch stock data for ticker: {ticker}. Please verify the symbol.")
+                    st.error(f"Could not fetch stock data for ticker: {ticker}. Please verify the symbol.")
 
             with tab_technical:
                 if stock_df is not None:
-                    st.markdown("#### 📊 Technical Indicators")
+                    st.markdown("#### Technical Indicators")
                     
                     # Calculate technical indicators
                     stock_df['Returns'] = stock_df['Close'].pct_change()
@@ -567,7 +703,7 @@ if analyze_button and headline_input.strip():
 
             with tab_comparison:
                 if comparison_ticker and comparison_df is not None:
-                    st.markdown(f"#### ⚖️ {ticker} vs {comparison_ticker}")
+                    st.markdown(f"#### {ticker} vs {comparison_ticker}")
                     
                     # Normalize prices for comparison
                     stock_normalized = (stock_df['Close'] / stock_df['Close'].iloc[0]) * 100
@@ -613,12 +749,12 @@ if analyze_button and headline_input.strip():
                         st.metric("Outperformance", f"{outperformance:.2f}%", delta=f"{outperformance:.2f}%")
                 
                 elif comparison_ticker:
-                    st.warning(f"⚠️ Could not fetch data for comparison ticker: {comparison_ticker}")
+                    st.warning(f"Could not fetch data for comparison ticker: {comparison_ticker}")
                 else:
-                    st.info("💡 Enter a comparison ticker in the parameters above to see side-by-side analysis")
+                    st.info("Enter a comparison ticker in the parameters above to see side-by-side analysis")
 
             with tab_historical:
-                st.markdown("#### 🔍 Similar Historical Headlines")
+                st.markdown("#### Similar Historical Headlines")
                 st.markdown("""
                 <div class='info-box'>
                 <strong>Context:</strong> The AI model identified these real-world headlines with similar 
@@ -646,7 +782,7 @@ if analyze_button and headline_input.strip():
                     st.info("No historical matches found in the database.")
 
             with tab_raw:
-                st.markdown("#### 🗂️ Raw Analysis Data")
+                st.markdown("#### Raw Analysis Data")
                 
                 col_json1, col_json2 = st.columns(2)
                 
@@ -671,26 +807,26 @@ if analyze_button and headline_input.strip():
                 if stock_df is not None:
                     csv = stock_df.to_csv(index=False)
                     st.download_button(
-                        label="📥 Download Stock Data (CSV)",
+                        label="Download Stock Data (CSV)",
                         data=csv,
                         file_name=f"{ticker}_{period}_{datetime.now().strftime('%Y%m%d')}.csv",
                         mime="text/csv",
                     )
 
         except Exception as e:
-            st.error(f"❌ An error occurred during analysis: {str(e)}")
-            with st.expander("🔧 Debug Information"):
+            st.error(f"An error occurred during analysis: {str(e)}")
+            with st.expander("Debug Information"):
                 st.exception(e)
 
 elif analyze_button and not headline_input.strip():
-    st.warning("⚠️ Please enter a headline to simulate.")
+    st.warning("Please enter a headline to simulate.")
 
 # --- FOOTER ---
 st.divider()
 footer_col1, footer_col2, footer_col3 = st.columns(3)
 with footer_col1:
-    st.caption("📊 Data provided by Yahoo Finance")
+    st.caption("Data provided by Yahoo Finance")
 with footer_col2:
-    st.caption("🤖 AI Analysis powered by advanced NLP models")
+    st.caption("AI Analysis powered by advanced NLP models")
 with footer_col3:
-    st.caption(f"⏰ Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
