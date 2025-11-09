@@ -13,8 +13,7 @@ USER_CREDENTIALS = {
 # --- Login Page Function ---
 def login_page():
     st.set_page_config(
-        page_title="Login | Finance News Simulator",
-        page_icon="📈",  # Changed to a more relevant icon
+        page_title="Login | Finance News Simulator",  # Changed to a more relevant icon
         layout="centered",
         initial_sidebar_state="collapsed"
     )
@@ -66,7 +65,7 @@ def login_page():
 
     # --- Login Box Layout ---
     with st.container(border=True):
-        st.markdown('<div class="login-title">📈 Finance News Impact Simulator</div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-title"> Finance News Impact Simulator</div>', unsafe_allow_html=True)
         st.markdown('<div class="login-subtitle">Access your financial news analysis dashboard</div>', unsafe_allow_html=True)
 
         username = st.text_input(
@@ -98,7 +97,7 @@ def login_page():
 
 # --- Main App Page Function (Placeholder) ---
 def main_app_page():
-    st.set_page_config(page_title="Simulator Dashboard", page_icon="📈", layout="wide")
+    st.set_page_config(page_title="Simulator Dashboard", layout="wide")
     
     st.sidebar.title(f"Welcome, {st.session_state['username']}!")
     if st.sidebar.button("Logout"):
@@ -106,7 +105,7 @@ def main_app_page():
         st.session_state["username"] = ""
         st.rerun()
 
-    st.title("📈 Finance News Impact Simulator")
+    st.title(" Finance News Impact Simulator")
     st.write("This is your main application dashboard.")
     # ... Add your main app components here ...
 
