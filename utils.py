@@ -84,6 +84,13 @@ def get_stock_data(ticker, period="1y"):
     try:
         stock = yf.Ticker(ticker)
         df = stock.history(period=period)
+        
+        # FIX: yfinance stores date as index, not as a column
+        # Reset index to make 'Date' an actual column
+        if df is not None and not df.empty:
+            df = df.reset_index()
+            print(f"✅ Fetched {len(df)} rows of stock data for {ticker}")
+        
         return df
     except Exception as e:
         st.error(f"Error fetching stock data: {e}")
