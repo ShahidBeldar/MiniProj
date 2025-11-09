@@ -34,7 +34,7 @@ def show_analysis_progress():
     ]
     for status in statuses:
         with st.spinner(status):
-            time.sleep(2.1)
+            time.sleep(1.6)
 
 # --- THEME TOGGLE FUNCTION ---
 def toggle_theme():
