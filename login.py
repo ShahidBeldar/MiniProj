@@ -86,7 +86,7 @@ def login_page():
         
         # --- Header ---
         # Using markdown for centered text
-        st.markdown('<h1 class="login-title">Finance Impact</h1>', unsafe_allow_html=True)
+        st.markdown('<h1 class="login-title">Finance News Impact Simulator</h1>', unsafe_allow_html=True)
         st.markdown('<p class="login-subtitle">Sign in to your account</p>', unsafe_allow_html=True)
 
         # --- Form Inputs ---
