@@ -1372,7 +1372,10 @@ with footer_col1:
 with footer_col2:
     st.caption("AI Models: FinBERT & DistilBERT")
 with footer_col3:
-    st.caption(f"Last Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")background: transparent;
+    st.caption(f"Last Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    st.markdown("""
+    <style>
+                background: transparent;
                 border-radius: 8px;
                 padding: 12px 24px;
                 border: 1px solid transparent;
