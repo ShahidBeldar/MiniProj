@@ -1,6 +1,6 @@
 streamlit
 pandas
-#textblob
+openpyxl
 scikit-learn
 yfinance
 plotly
