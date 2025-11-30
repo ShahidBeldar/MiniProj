@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pandas as pd
 from datetime import datetime, timedelta
-from analyzer import analyze_headline
+from analyser import analyze_headline
 from utils import get_stock_data
 from login import login_page
 import time
