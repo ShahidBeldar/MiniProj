@@ -1,9 +1,0 @@
-streamlit
-pandas
-openpyxl
-scikit-learn
-yfinance
-plotly
-transformers
-torch
-
