@@ -150,7 +150,8 @@ for col, title, desc, color in stages:
                 <div style="font-size:.62rem;color:#3D5268;font-family:'Manrope',sans-serif;
                             line-height:1.4;">{desc}</div>
             </div>
-        """, unsafe_allow_html=True)q1, q2, q3, q4, q5 = st.columns(5)
+        """, unsafe_allow_html=True)
+        q1, q2, q3, q4, q5 = st.columns(5)
 _quick = [
     (q1, "pages/1_Dashboard.py", "Analyze Headline"),
     (q2, "pages/6_Market.py",    "Market Charts"),
