@@ -1,0 +1,552 @@
+{
+  "companies": {
+    "TSLA": {
+      "name": "Tesla, Inc.",
+      "exchange": "NASDAQ",
+      "sector": "EV/Auto",
+      "country": "US",
+      "subsidiaries": [
+        {
+          "name": "Tesla Energy, Inc.",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Energy",
+          "description": "Energy products: Powerwall, Powerpack, Megapack",
+          "subsidiaries": [
+            {
+              "name": "SolarCity Corporation",
+              "ticker": null,
+              "ownership": 100,
+              "relationship": "integrated",
+              "sector": "Solar",
+              "description": "Solar energy services, acquired 2016",
+              "subsidiaries": []
+            }
+          ]
+        },
+        {
+          "name": "Tesla Insurance Services",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Insurance",
+          "description": "Vehicle insurance subsidiary",
+          "subsidiaries": []
+        },
+        {
+          "name": "Grohmann Engineering GmbH",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Manufacturing",
+          "description": "Automated manufacturing systems",
+          "subsidiaries": []
+        },
+        {
+          "name": "Panasonic EV Energy (JV)",
+          "ticker": "6752.T",
+          "ownership": 49,
+          "relationship": "joint_venture",
+          "sector": "Battery",
+          "description": "Battery cell JV partner for Gigafactory",
+          "subsidiaries": []
+        }
+      ]
+    },
+    "AAPL": {
+      "name": "Apple Inc.",
+      "exchange": "NASDAQ",
+      "sector": "Technology",
+      "country": "US",
+      "subsidiaries": [
+        {
+          "name": "Apple Services",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Software/Services",
+          "description": "App Store, iCloud, Apple Music, Apple TV+",
+          "subsidiaries": []
+        },
+        {
+          "name": "Beats Electronics LLC",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Consumer Electronics",
+          "description": "Audio products, acquired 2014",
+          "subsidiaries": []
+        },
+        {
+          "name": "Apple Retail LLC",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Retail",
+          "description": "500+ Apple retail stores worldwide",
+          "subsidiaries": []
+        },
+        {
+          "name": "Anobit Technologies",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Semiconductors",
+          "description": "Flash memory technology",
+          "subsidiaries": []
+        }
+      ]
+    },
+    "GOOGL": {
+      "name": "Alphabet Inc.",
+      "exchange": "NASDAQ",
+      "sector": "Technology",
+      "country": "US",
+      "subsidiaries": [
+        {
+          "name": "Google LLC",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Internet/Advertising",
+          "description": "Search, Ads, Maps, Gmail, YouTube",
+          "subsidiaries": [
+            {
+              "name": "YouTube LLC",
+              "ticker": null,
+              "ownership": 100,
+              "relationship": "wholly_owned",
+              "sector": "Media/Streaming",
+              "description": "Video platform, acquired 2006",
+              "subsidiaries": []
+            },
+            {
+              "name": "Google Cloud",
+              "ticker": null,
+              "ownership": 100,
+              "relationship": "division",
+              "sector": "Cloud Computing",
+              "description": "Cloud infrastructure and AI services",
+              "subsidiaries": []
+            }
+          ]
+        },
+        {
+          "name": "Waymo LLC",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Autonomous Vehicles",
+          "description": "Self-driving technology company",
+          "subsidiaries": []
+        },
+        {
+          "name": "DeepMind Technologies",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "AI Research",
+          "description": "AI research lab, acquired 2014",
+          "subsidiaries": []
+        },
+        {
+          "name": "Verily Life Sciences",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Healthcare",
+          "description": "Life sciences and health data",
+          "subsidiaries": []
+        }
+      ]
+    },
+    "MSFT": {
+      "name": "Microsoft Corporation",
+      "exchange": "NASDAQ",
+      "sector": "Technology",
+      "country": "US",
+      "subsidiaries": [
+        {
+          "name": "LinkedIn Corporation",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Social/Professional Network",
+          "description": "Professional networking, acquired 2016",
+          "subsidiaries": []
+        },
+        {
+          "name": "GitHub, Inc.",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Developer Tools",
+          "description": "Code hosting and collaboration, acquired 2018",
+          "subsidiaries": []
+        },
+        {
+          "name": "Activision Blizzard",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Gaming",
+          "description": "Video games, acquired 2023",
+          "subsidiaries": []
+        },
+        {
+          "name": "Nuance Communications",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "AI/Healthcare",
+          "description": "AI and cloud solutions, acquired 2022",
+          "subsidiaries": []
+        },
+        {
+          "name": "OpenAI (strategic stake)",
+          "ticker": null,
+          "ownership": 49,
+          "relationship": "strategic_investment",
+          "sector": "AI",
+          "description": "Multi-billion dollar investment partnership",
+          "subsidiaries": []
+        }
+      ]
+    },
+    "NVDA": {
+      "name": "NVIDIA Corporation",
+      "exchange": "NASDAQ",
+      "sector": "Semiconductors",
+      "country": "US",
+      "subsidiaries": [
+        {
+          "name": "Mellanox Technologies",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Networking",
+          "description": "High-performance networking, acquired 2020",
+          "subsidiaries": []
+        },
+        {
+          "name": "Cumulus Networks",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Cloud Networking",
+          "description": "Open networking OS",
+          "subsidiaries": []
+        },
+        {
+          "name": "Arm Ltd (strategic stake)",
+          "ticker": "ARM",
+          "ownership": 10,
+          "relationship": "strategic_investment",
+          "sector": "Semiconductors",
+          "description": "Chip architecture licensing",
+          "subsidiaries": []
+        }
+      ]
+    },
+    "AMZN": {
+      "name": "Amazon.com, Inc.",
+      "exchange": "NASDAQ",
+      "sector": "E-commerce/Cloud",
+      "country": "US",
+      "subsidiaries": [
+        {
+          "name": "Amazon Web Services (AWS)",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "division",
+          "sector": "Cloud Computing",
+          "description": "World's largest cloud provider",
+          "subsidiaries": []
+        },
+        {
+          "name": "Whole Foods Market",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Grocery/Retail",
+          "description": "Organic grocery chain, acquired 2017",
+          "subsidiaries": []
+        },
+        {
+          "name": "Twitch Interactive",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Streaming/Gaming",
+          "description": "Live streaming platform, acquired 2014",
+          "subsidiaries": []
+        },
+        {
+          "name": "MGM Holdings",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Entertainment",
+          "description": "Film and TV studio, acquired 2022",
+          "subsidiaries": []
+        },
+        {
+          "name": "Rivian Automotive (stake)",
+          "ticker": "RIVN",
+          "ownership": 18,
+          "relationship": "investment",
+          "sector": "EV",
+          "description": "Electric vehicle manufacturer investment",
+          "subsidiaries": []
+        }
+      ]
+    },
+    "RELIANCE": {
+      "name": "Reliance Industries Limited",
+      "exchange": "NSE",
+      "sector": "Conglomerate",
+      "country": "IN",
+      "subsidiaries": [
+        {
+          "name": "Jio Platforms Limited",
+          "ticker": null,
+          "ownership": 67.32,
+          "relationship": "majority_owned",
+          "sector": "Telecom/Digital",
+          "description": "Digital services, telecom, 500M+ subscribers",
+          "subsidiaries": [
+            {
+              "name": "Reliance Jio Infocomm Ltd",
+              "ticker": null,
+              "ownership": 100,
+              "relationship": "wholly_owned",
+              "sector": "Telecom",
+              "description": "4G/5G telecom services arm",
+              "subsidiaries": []
+            },
+            {
+              "name": "Haptik Technologies",
+              "ticker": null,
+              "ownership": 87,
+              "relationship": "majority_owned",
+              "sector": "AI/Conversational",
+              "description": "Conversational AI platform",
+              "subsidiaries": []
+            }
+          ]
+        },
+        {
+          "name": "Reliance Retail Ventures",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Retail",
+          "description": "India's largest retail chain",
+          "subsidiaries": [
+            {
+              "name": "AJIO (fashion portal)",
+              "ticker": null,
+              "ownership": 100,
+              "relationship": "division",
+              "sector": "Fashion/E-commerce",
+              "description": "Online fashion marketplace",
+              "subsidiaries": []
+            }
+          ]
+        },
+        {
+          "name": "Network18 Media & Investments",
+          "ticker": "NETWORK18.NS",
+          "ownership": 73.4,
+          "relationship": "majority_owned",
+          "sector": "Media",
+          "description": "TV, digital, news media group",
+          "subsidiaries": []
+        },
+        {
+          "name": "Reliance Jio Platforms (O2C)",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "division",
+          "sector": "Oil & Gas/Chemicals",
+          "description": "Oil-to-chemicals core business",
+          "subsidiaries": []
+        }
+      ]
+    },
+    "TCS": {
+      "name": "Tata Consultancy Services Limited",
+      "exchange": "NSE",
+      "sector": "IT Services",
+      "country": "IN",
+      "subsidiaries": [
+        {
+          "name": "TCS BaNCS",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "division",
+          "sector": "Banking Software",
+          "description": "Core banking and financial services platform",
+          "subsidiaries": []
+        },
+        {
+          "name": "Diligenta Limited (UK)",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Insurance IT",
+          "description": "Life and pensions BPO services, UK",
+          "subsidiaries": []
+        },
+        {
+          "name": "TCS Japan K.K.",
+          "ticker": null,
+          "ownership": 51,
+          "relationship": "joint_venture",
+          "sector": "IT Services",
+          "description": "IT consulting JV in Japan",
+          "subsidiaries": []
+        },
+        {
+          "name": "TCS Financial Solutions",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "division",
+          "sector": "Fintech",
+          "description": "Financial technology products",
+          "subsidiaries": []
+        }
+      ]
+    },
+    "INFY": {
+      "name": "Infosys Limited",
+      "exchange": "NSE",
+      "sector": "IT Services",
+      "country": "IN",
+      "subsidiaries": [
+        {
+          "name": "EdgeVerve Systems Limited",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Software Products",
+          "description": "Enterprise products and AI platforms",
+          "subsidiaries": []
+        },
+        {
+          "name": "Infosys BPM Limited",
+          "ticker": null,
+          "ownership": 99.98,
+          "relationship": "wholly_owned",
+          "sector": "BPO",
+          "description": "Business process outsourcing",
+          "subsidiaries": []
+        },
+        {
+          "name": "Panaya Ltd",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Testing/Automation",
+          "description": "Cloud-based testing and automation tools",
+          "subsidiaries": []
+        },
+        {
+          "name": "Infosys Consulting AG",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Consulting",
+          "description": "Management and technology consulting",
+          "subsidiaries": []
+        }
+      ]
+    },
+    "WIPRO": {
+      "name": "Wipro Limited",
+      "exchange": "NSE",
+      "sector": "IT Services",
+      "country": "IN",
+      "subsidiaries": [
+        {
+          "name": "Capco (The Capital Markets Company)",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "Financial Services Consulting",
+          "description": "Capital markets consulting, acquired 2021",
+          "subsidiaries": []
+        },
+        {
+          "name": "Wipro Digital",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "division",
+          "sector": "Digital Transformation",
+          "description": "Digital and design-led transformation",
+          "subsidiaries": []
+        },
+        {
+          "name": "Rizing LLC",
+          "ticker": null,
+          "ownership": 100,
+          "relationship": "wholly_owned",
+          "sector": "SAP Consulting",
+          "description": "SAP consulting and services",
+          "subsidiaries": []
+        }
+      ]
+    },
+    "HDFCBANK": {
+      "name": "HDFC Bank Limited",
+      "exchange": "NSE",
+      "sector": "Banking",
+      "country": "IN",
+      "subsidiaries": [
+        {
+          "name": "HDB Financial Services",
+          "ticker": null,
+          "ownership": 94.6,
+          "relationship": "majority_owned",
+          "sector": "NBFC",
+          "description": "Non-banking financial services arm",
+          "subsidiaries": []
+        },
+        {
+          "name": "HDFC Securities Limited",
+          "ticker": null,
+          "ownership": 95.1,
+          "relationship": "majority_owned",
+          "sector": "Broking",
+          "description": "Stock broking and investment services",
+          "subsidiaries": []
+        },
+        {
+          "name": "HDFC Life Insurance (stake)",
+          "ticker": "HDFCLIFE.NS",
+          "ownership": 50.4,
+          "relationship": "majority_owned",
+          "sector": "Insurance",
+          "description": "Life insurance post-HDFC merger",
+          "subsidiaries": []
+        }
+      ]
+    }
+  },
+  "relationship_types": {
+    "wholly_owned": {"decay": 1.0, "label": "100% Owned"},
+    "majority_owned": {"decay": 0.85, "label": "Majority Owned"},
+    "joint_venture": {"decay": 0.55, "label": "Joint Venture"},
+    "strategic_investment": {"decay": 0.25, "label": "Strategic Stake"},
+    "investment": {"decay": 0.20, "label": "Investment"},
+    "division": {"decay": 0.95, "label": "Division"},
+    "integrated": {"decay": 0.90, "label": "Integrated"}
+  },
+  "depth_decay": {
+    "0": 1.0,
+    "1": 0.72,
+    "2": 0.48,
+    "3": 0.30
+  }
+}
