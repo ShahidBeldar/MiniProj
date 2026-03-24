@@ -85,6 +85,31 @@ st.markdown(
     f'Showing {len(filtered)} of {len(history)} analyses</div>',
     unsafe_allow_html=True,
 )
+# After filtering, add pagination:
+PAGE_SIZE = 20
+total_filtered = len(filtered)
+total_pages = max(1, (total_filtered + PAGE_SIZE - 1) // PAGE_SIZE)
+
+pc1, pc2 = st.columns([3, 1])
+with pc2:
+    page_num = st.number_input(
+        "Page", min_value=1, max_value=total_pages, value=1, key="_hist_page"
+    )
+with pc1:
+    st.markdown(
+        f'<div style="font-size:.65rem;color:#3D5268;margin-bottom:.75rem;'
+        f'font-family:\'Manrope\',sans-serif;">'
+        f'Page {page_num}/{total_pages} · Showing {min(PAGE_SIZE, total_filtered)} '
+        f'of {total_filtered} analyses</div>',
+        unsafe_allow_html=True,
+    )
+
+start = (page_num - 1) * PAGE_SIZE
+paginated = filtered[start:start + PAGE_SIZE]
+
+# Use `paginated` instead of `filtered` in the rendering loop:
+for item in paginated:
+    # ... render items
 
 # ── TIMELINE CHART ────────────────────────────────────────────────────────────
 if len(filtered) >= 3:
