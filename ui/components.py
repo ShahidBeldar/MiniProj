@@ -28,8 +28,8 @@ def polarity_bar(polarity: float) -> str:
     pct = round(((polarity + 1) / 2) * 100, 1)
     return f"""
 <div>
-  <div style="display:flex;justify-content:space-between;
-              font-size:.59rem;color:#3D5268;margin-bottom:4px;font-family:'Manrope',sans-serif;">
+  <div style="display:flex;justify-content:space-between;font-size:.59rem;
+              color:#3D5268;margin-bottom:4px;font-family:'Manrope',sans-serif;">
     <span>-1.0 Strong Neg</span><span>0 Neutral</span><span>+1.0 Strong Pos</span>
   </div>
   <div class="pol-track">
@@ -62,8 +62,8 @@ def mini_progress_bar(label: str, value: float, color: str) -> str:
     pct = max(0, min(100, int(value * 100)))
     return f"""
 <div style="margin-bottom:12px;">
-  <div style="display:flex;justify-content:space-between;
-              font-size:.68rem;color:#7A92A8;margin-bottom:4px;">
+  <div style="display:flex;justify-content:space-between;font-size:.68rem;
+              color:#7A92A8;margin-bottom:4px;">
     <span style="font-family:'Manrope',sans-serif;">{label}</span>
     <span style="color:{color};font-family:'Syne',sans-serif;font-weight:700;">{pct}%</span>
   </div>
@@ -91,8 +91,8 @@ def page_header(title_html: str, subtitle: str = "") -> str:
 
 
 def attribution_bar(word: str, contribution: float, max_c: float) -> str:
-    w    = int(abs(contribution) / max_c * 100) if max_c else 0
-    c    = "#00E8A0" if contribution > 0 else "#FF3D60"
+    w = int(abs(contribution) / max_c * 100) if max_c else 0
+    c = "#00E8A0" if contribution > 0 else "#FF3D60"
     sign = "+" if contribution > 0 else "−"
     return f"""
 <div style="display:flex;align-items:center;gap:10px;padding:7px 12px;
@@ -113,8 +113,8 @@ def attribution_bar(word: str, contribution: float, max_c: float) -> str:
 def news_card(title: str, source: str, published: str, pol: float,
               tickers: str, is_rumour: bool, link: str) -> str:
     from core.feeds import sentiment_dot_color
-    dc    = sentiment_dot_color(pol)
-    side  = "pos-card" if pol > 0.1 else ("neg-card" if pol < -0.1 else "neu-card")
+    dc   = sentiment_dot_color(pol)
+    side = "pos-card" if pol > 0.1 else ("neg-card" if pol < -0.1 else "neu-card")
     chips = " ".join(
         f'<span class="fi-badge badge-accent">{t}</span>'
         for t in tickers.split(", ") if t and t != "GENERAL"
@@ -122,16 +122,17 @@ def news_card(title: str, source: str, published: str, pol: float,
     rumour_chip = '<span class="fi-badge badge-orange">Rumour</span>' if is_rumour else ""
     pol_sign = f"{pol:+.2f}"
     pol_kind = "green" if pol > 0.1 else ("red" if pol < -0.1 else "neutral")
-    link_html = (f'<a href="{link}" target="_blank" '
-                 f'style="font-size:.61rem;color:#3D5268;margin-left:auto;text-decoration:none;">'
-                 f'Source →</a>') if link else ""
+    link_html = (
+        f'<a href="{link}" target="_blank" '
+        f'style="font-size:.61rem;color:#3D5268;margin-left:auto;text-decoration:none;">'
+        f'Source →</a>'
+    ) if link else ""
     return f"""
 <div class="news-card {side}">
   <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
     <span style="font-size:.62rem;color:#3D5268;letter-spacing:.07em;
                  text-transform:uppercase;font-family:'Manrope',sans-serif;">{source}</span>
-    <span style="width:3px;height:3px;background:#3D5268;border-radius:50%;
-                 display:inline-block;"></span>
+    <span style="width:3px;height:3px;background:#3D5268;border-radius:50%;display:inline-block;"></span>
     <span style="font-size:.61rem;color:#3D5268;font-family:'Manrope',sans-serif;">{published}</span>
     <span style="margin-left:auto;width:7px;height:7px;border-radius:50%;
                  background:{dc};box-shadow:0 0 6px {dc};flex-shrink:0;"></span>
@@ -149,29 +150,27 @@ def news_card(title: str, source: str, published: str, pol: float,
 
 def ripple_node(node: dict) -> str:
     from core.graph import impact_color, impact_label, rel_tag
-    depth = node["depth"]
-    imp   = node["impact"]
-    ic    = impact_color(imp)
-    il    = impact_label(imp)
-    indent = depth * 22
+    depth    = node["depth"]
+    imp      = node["impact"]
+    ic       = impact_color(imp)
+    il       = impact_label(imp)
+    indent   = depth * 22
     root_cls = "root-node" if node["is_root"] else ""
-    rel   = node.get("relationship", "")
-    tag   = rel_tag(rel)
-    dashed = "border-style:dashed;" if rel in ("joint_venture","strategic_investment","investment") else ""
+    rel      = node.get("relationship", "")
+    tag      = rel_tag(rel)
+    dashed   = "border-style:dashed;" if rel in ("joint_venture", "strategic_investment", "investment") else ""
     return f"""
 <div class="tree-node {root_cls}" style="margin-left:{indent}px;{dashed}">
-  <span style="font-family:'JetBrains Mono',monospace;font-size:.62rem;
-               color:#3D5268;min-width:26px;text-align:center;background:#0F1520;
+  <span style="font-family:'JetBrains Mono',monospace;font-size:.62rem;color:#3D5268;
+               min-width:26px;text-align:center;background:#0F1520;
                border-radius:4px;padding:2px 4px;">{tag}</span>
   <div style="flex:1;min-width:0;">
-    <div style="font-family:'Syne',sans-serif;font-weight:600;font-size:.8rem;
-                color:#DDE6F0;">{node['name']}</div>
+    <div style="font-family:'Syne',sans-serif;font-weight:600;font-size:.8rem;color:#DDE6F0;">{node['name']}</div>
     <div style="font-size:.65rem;color:#3D5268;white-space:nowrap;overflow:hidden;
                 text-overflow:ellipsis;font-family:'Manrope',sans-serif;">{node.get('description','')}</div>
   </div>
   <div style="text-align:right;flex-shrink:0;">
-    <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:.84rem;
-                color:{ic};">{imp:+.3f}</div>
+    <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:.84rem;color:{ic};">{imp:+.3f}</div>
     <div style="font-size:.61rem;color:#3D5268;">{il} · {node['ownership']}%</div>
   </div>
 </div>"""
@@ -185,13 +184,11 @@ def hist_row(hl: str, date: str, t3: float, sim: float, evt: str) -> str:
   <div style="font-family:'JetBrains Mono',monospace;font-size:.66rem;
               color:#3D5268;min-width:80px;padding-top:2px;">{date}</div>
   <div style="flex:1;">
-    <div style="font-size:.8rem;color:#7A92A8;line-height:1.5;
-                font-family:'Manrope',sans-serif;">{hl}</div>
+    <div style="font-size:.8rem;color:#7A92A8;line-height:1.5;font-family:'Manrope',sans-serif;">{hl}</div>
     <div style="margin-top:5px;">{badge(evt or 'General','neutral')}</div>
   </div>
   <div style="text-align:right;flex-shrink:0;min-width:78px;">
-    <div style="font-family:'Syne',sans-serif;font-weight:700;
-                font-size:.88rem;color:{t3_c};">{t3_s}</div>
+    <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:.88rem;color:{t3_c};">{t3_s}</div>
     <div style="font-size:.61rem;color:#3D5268;">T+3 · {sim:.0f}% sim</div>
   </div>
 </div>"""
@@ -207,6 +204,5 @@ def live_price_card(ticker: str, price_d: dict) -> str:
   <div class="fi-title" style="margin-bottom:.45rem;">{ticker} · Live Price</div>
   <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.6rem;
               color:#DDE6F0;line-height:1;">{p}</div>
-  <div style="font-size:.78rem;color:{cc};margin-top:4px;
-              font-family:'Manrope',sans-serif;">{chg} today</div>
+  <div style="font-size:.78rem;color:{cc};margin-top:4px;font-family:'Manrope',sans-serif;">{chg} today</div>
 </div>"""
