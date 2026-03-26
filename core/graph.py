@@ -1,11 +1,15 @@
 """
 core/graph.py — Corporate hierarchy + ripple effect propagation.
 No Streamlit imports. Graph is loaded lazily and cached by callers.
+Hierarchy JSON is seeded by core/seeder.py on first run.
 """
 from __future__ import annotations
-import json, os
+import json
+import os
 import networkx as nx
 
+
+# ── HIERARCHY LOADING ─────────────────────────────────────────────────────────
 
 def _hier_path() -> str:
     root = os.path.dirname(os.path.dirname(__file__))
@@ -22,13 +26,26 @@ def get_hierarchy() -> dict:
             with open(_hier_path()) as f:
                 _HIERARCHY_CACHE = json.load(f)
         except Exception:
-            _HIERARCHY_CACHE = {"companies": {}, "relationship_types": {}, "depth_decay": {}}
+            # Fallback: attempt to seed on-the-fly
+            try:
+                from core.seeder import ensure_hierarchy
+                ensure_hierarchy()
+                with open(_hier_path()) as f:
+                    _HIERARCHY_CACHE = json.load(f)
+            except Exception:
+                _HIERARCHY_CACHE = {
+                    "companies": {},
+                    "relationship_types": {},
+                    "depth_decay": {},
+                }
     return _HIERARCHY_CACHE
 
 
 def get_tickers() -> list[str]:
     return list(get_hierarchy().get("companies", {}).keys())
 
+
+# ── GRAPH CONSTRUCTION ────────────────────────────────────────────────────────
 
 def build_graph(ticker: str) -> nx.DiGraph:
     """Build NetworkX DiGraph for a given ticker's subsidiary tree."""
@@ -73,54 +90,56 @@ def build_graph(ticker: str) -> nx.DiGraph:
     return G
 
 
+# ── RIPPLE PROPAGATION ────────────────────────────────────────────────────────
+
 def compute_ripple(ticker: str, polarity: float) -> list[dict]:
     """
-    Propagate polarity through the corporate tree.
+    Propagate polarity through corporate tree.
     impact = parent_polarity × ownership_pct × relationship_decay × depth_decay
     """
-    hier  = get_hierarchy()
-    G     = build_graph(ticker)
+    hier = get_hierarchy()
+    G = build_graph(ticker)
     if G.number_of_nodes() == 0:
         return []
 
     rel_dc = hier.get("relationship_types", {})
     dep_dc = hier.get("depth_decay", {})
-    cos    = hier.get("companies", {})
-    root   = cos.get(ticker, {})
+    cos = hier.get("companies", {})
+    root = cos.get(ticker, {})
 
     results: list[dict] = [{
-        "name":        root.get("name", ticker),
-        "ticker":      ticker,
-        "sector":      root.get("sector", ""),
-        "depth":       0,
-        "ownership":   100,
-        "relationship":"parent",
-        "impact":      round(polarity, 3),
-        "decay_factor":1.0,
-        "is_root":     True,
-        "description": "Parent company — direct full impact",
+        "name":         root.get("name", ticker),
+        "ticker":       ticker,
+        "sector":       root.get("sector", ""),
+        "depth":        0,
+        "ownership":    100,
+        "relationship": "parent",
+        "impact":       round(polarity, 3),
+        "decay_factor": 1.0,
+        "is_root":      True,
+        "description":  "Parent company — direct full impact",
     }]
 
     def _walk(pk: str, parent_impact: float, depth: int):
         for _, ck, ed in G.out_edges(pk, data=True):
-            nd      = G.nodes[ck]
-            own     = ed.get("ownership", 100)
-            rel     = ed.get("relationship", "wholly_owned")
-            rel_f   = rel_dc.get(rel, {}).get("decay", 0.8)
-            dep_f   = float(dep_dc.get(str(depth), 0.3))
-            own_f   = own / 100.0
-            decay   = rel_f * dep_f * own_f
-            impact  = round(parent_impact * decay, 3)
+            nd = G.nodes[ck]
+            own   = ed.get("ownership", 100)
+            rel   = ed.get("relationship", "wholly_owned")
+            rel_f = rel_dc.get(rel, {}).get("decay", 0.8)
+            dep_f = float(dep_dc.get(str(depth), 0.3))
+            own_f = own / 100.0
+            decay  = rel_f * dep_f * own_f
+            impact = round(parent_impact * decay, 3)
             results.append({
-                "name":        nd["name"],
-                "ticker":      None,
-                "sector":      nd.get("sector", ""),
-                "depth":       depth,
-                "ownership":   own,
-                "relationship":rel,
-                "impact":      impact,
-                "decay_factor":round(decay, 3),
-                "is_root":     False,
+                "name":         nd["name"],
+                "ticker":       None,
+                "sector":       nd.get("sector", ""),
+                "depth":        depth,
+                "ownership":    own,
+                "relationship": rel,
+                "impact":       impact,
+                "decay_factor": round(decay, 3),
+                "is_root":      False,
                 "description": (
                     f"{rel_dc.get(rel, {}).get('label', rel)} · "
                     f"{own}% stake · depth-{depth} decay ×{dep_f:.2f}"
@@ -133,7 +152,7 @@ def compute_ripple(ticker: str, polarity: float) -> list[dict]:
     return results
 
 
-# ── Display helpers ────────────────────────────────────────────────────────────
+# ── DISPLAY HELPERS ───────────────────────────────────────────────────────────
 
 def impact_color(v: float) -> str:
     if v <= -0.5:  return "#FF3D60"
