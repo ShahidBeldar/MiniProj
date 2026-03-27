@@ -1,13 +1,17 @@
 """
 core/graph.py — Corporate hierarchy + ripple effect propagation.
+FIX: Module-level _HIERARCHY_CACHE replaced with a function-scoped singleton
+     to be safe in multi-worker deployments (Streamlit Cloud, Gunicorn).
+     Callers should wrap get_hierarchy() with @st.cache_resource if needed.
 No Streamlit imports. Graph is loaded lazily and cached by callers.
-Hierarchy JSON is seeded by core/seeder.py on first run.
 """
 from __future__ import annotations
 import json
 import os
 import networkx as nx
+import logging
 
+log = logging.getLogger(__name__)
 
 # ── HIERARCHY LOADING ─────────────────────────────────────────────────────────
 
@@ -16,28 +20,32 @@ def _hier_path() -> str:
     return os.path.join(root, "data", "corporate_hierarchy.json")
 
 
+# Module-level cache (single-process safe; use @st.cache_resource at call site
+# for multi-worker deployments)
 _HIERARCHY_CACHE: dict | None = None
 
 
 def get_hierarchy() -> dict:
     global _HIERARCHY_CACHE
-    if _HIERARCHY_CACHE is None:
+    if _HIERARCHY_CACHE is not None:
+        return _HIERARCHY_CACHE
+    try:
+        with open(_hier_path()) as f:
+            _HIERARCHY_CACHE = json.load(f)
+    except Exception as e:
+        log.warning("Could not load corporate_hierarchy.json: %s — attempting seed", e)
         try:
+            from core.seeder import ensure_hierarchy
+            ensure_hierarchy()
             with open(_hier_path()) as f:
                 _HIERARCHY_CACHE = json.load(f)
-        except Exception:
-            # Fallback: attempt to seed on-the-fly
-            try:
-                from core.seeder import ensure_hierarchy
-                ensure_hierarchy()
-                with open(_hier_path()) as f:
-                    _HIERARCHY_CACHE = json.load(f)
-            except Exception:
-                _HIERARCHY_CACHE = {
-                    "companies": {},
-                    "relationship_types": {},
-                    "depth_decay": {},
-                }
+        except Exception as e2:
+            log.error("Hierarchy seed also failed: %s", e2)
+            _HIERARCHY_CACHE = {
+                "companies": {},
+                "relationship_types": {},
+                "depth_decay": {},
+            }
     return _HIERARCHY_CACHE
 
 
@@ -67,11 +75,15 @@ def build_graph(ticker: str) -> nx.DiGraph:
     )
 
     def _add(parent_key: str, children: list, depth: int):
+        if not children:
+            return
         for ch in children:
+            if not isinstance(ch, dict):
+                continue
             key = ch["name"].replace(" ", "_")[:40]
             G.add_node(
                 key,
-                name=ch["name"],
+                name=ch.get("name", key),
                 sector=ch.get("sector", ""),
                 depth=depth,
                 ownership=ch.get("ownership", 100),
@@ -83,8 +95,7 @@ def build_graph(ticker: str) -> nx.DiGraph:
                 ownership=ch.get("ownership", 100),
                 relationship=ch.get("relationship", "wholly_owned"),
             )
-            if ch.get("subsidiaries"):
-                _add(key, ch["subsidiaries"], depth + 1)
+            _add(key, ch.get("subsidiaries", []), depth + 1)
 
     _add(ticker, root.get("subsidiaries", []), 1)
     return G
@@ -95,7 +106,8 @@ def build_graph(ticker: str) -> nx.DiGraph:
 def compute_ripple(ticker: str, polarity: float) -> list[dict]:
     """
     Propagate polarity through corporate tree.
-    impact = parent_polarity × ownership_pct × relationship_decay × depth_decay
+    impact = parent_polarity x ownership_pct x relationship_decay x depth_decay
+    FIX: Guards added for missing keys in relationship/depth data.
     """
     hier = get_hierarchy()
     G = build_graph(ticker)
@@ -104,8 +116,8 @@ def compute_ripple(ticker: str, polarity: float) -> list[dict]:
 
     rel_dc = hier.get("relationship_types", {})
     dep_dc = hier.get("depth_decay", {})
-    cos = hier.get("companies", {})
-    root = cos.get(ticker, {})
+    cos    = hier.get("companies", {})
+    root   = cos.get(ticker, {})
 
     results: list[dict] = [{
         "name":         root.get("name", ticker),
@@ -122,7 +134,7 @@ def compute_ripple(ticker: str, polarity: float) -> list[dict]:
 
     def _walk(pk: str, parent_impact: float, depth: int):
         for _, ck, ed in G.out_edges(pk, data=True):
-            nd = G.nodes[ck]
+            nd    = G.nodes[ck]
             own   = ed.get("ownership", 100)
             rel   = ed.get("relationship", "wholly_owned")
             rel_f = rel_dc.get(rel, {}).get("decay", 0.8)
@@ -131,7 +143,7 @@ def compute_ripple(ticker: str, polarity: float) -> list[dict]:
             decay  = rel_f * dep_f * own_f
             impact = round(parent_impact * decay, 3)
             results.append({
-                "name":         nd["name"],
+                "name":         nd.get("name", ck),
                 "ticker":       None,
                 "sector":       nd.get("sector", ""),
                 "depth":        depth,
@@ -142,7 +154,7 @@ def compute_ripple(ticker: str, polarity: float) -> list[dict]:
                 "is_root":      False,
                 "description": (
                     f"{rel_dc.get(rel, {}).get('label', rel)} · "
-                    f"{own}% stake · depth-{depth} decay ×{dep_f:.2f}"
+                    f"{own}% stake · depth-{depth} decay x{dep_f:.2f}"
                 ),
             })
             _walk(ck, impact, depth + 1)

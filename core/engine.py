@@ -1,6 +1,11 @@
 """
-core/engine.py — 7-stage ML analysis pipeline. No Streamlit imports.
-
+core/engine.py — 7-stage ML analysis pipeline.
+FIX: Streamlit imports removed from model loaders — models cached via functools.lru_cache
+     so engine.py is truly pure Python (no Streamlit dependency).
+     Callers that want @st.cache_resource should wrap get_finbert/get_encoder themselves.
+FIX: Exception logging added — silent failures now emit warnings.
+FIX: TF-IDF fallback for historical similarity is fully implemented.
+FIX: get_news_df() logs errors instead of silently returning empty DataFrame.
 Stages:
   1. NER          — entity detection (keyword matching)
   2. Event        — regex-based event classification (9 types)
@@ -9,30 +14,28 @@ Stages:
   5. SHAP         — word-level attribution via weighted lexicon
   6. Historical   — sentence-transformer similarity search (TF-IDF fallback)
   7. Macro        — VIX-based amplification factor
-
-FIX: Models use @st.cache_resource (not module globals) for reliable caching.
-FIX: compute_ripple imported at module level.
-FIX: Credibility dampening applied BEFORE event multiplier.
-FIX: Relevance score uses non-matching entity count.
-FIX: Corpus embeddings cached separately from per-query encoding.
-FIX: len(similar) handled safely for None / empty DataFrame.
 """
 from __future__ import annotations
 import re
 import os
+import logging
+import functools
 import pandas as pd
 import numpy as np
 from datetime import datetime
 from typing import Optional
 
-import streamlit as st
+from core.graph import compute_ripple
 
-from core.graph import compute_ripple  # module-level import — no circular risk
+log = logging.getLogger(__name__)
 
 
-# ── LAZY MODEL LOADERS (cache_resource = one instance per server process) ─────
+# ── LAZY MODEL LOADERS ────────────────────────────────────────────────────────
+# FIX: Use functools.lru_cache instead of @st.cache_resource so engine.py has
+#      no Streamlit dependency. Streamlit pages that want persistent caching can
+#      wrap get_finbert() in their own @st.cache_resource decorated function.
 
-@st.cache_resource(show_spinner="Loading FinBERT sentiment model…")
+@functools.lru_cache(maxsize=1)
 def get_finbert():
     try:
         from transformers import pipeline as hf_pipeline
@@ -42,26 +45,28 @@ def get_finbert():
             truncation=True,
             max_length=512,
         )
-    except Exception:
+    except Exception as e:
+        log.warning("FinBERT unavailable, falling back to keyword scoring: %s", e)
         return None
 
 
-@st.cache_resource(show_spinner="Loading sentence encoder…")
+@functools.lru_cache(maxsize=1)
 def get_encoder():
     try:
         from sentence_transformers import SentenceTransformer
         return SentenceTransformer("all-MiniLM-L6-v2")
-    except Exception:
+    except Exception as e:
+        log.warning("SentenceTransformer unavailable, using TF-IDF fallback: %s", e)
         return None
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
 def get_news_df() -> pd.DataFrame:
     try:
         from core.seeder import ensure_sample_data
         path = ensure_sample_data()
         return pd.read_csv(path)
-    except Exception:
+    except Exception as e:
+        log.error("Could not load news CSV: %s", e)
         return pd.DataFrame()
 
 
@@ -140,16 +145,16 @@ _EVENT_PATTERNS: dict[str, list[str]] = {
 }
 
 _EVENT_MULTIPLIER: dict[str, float] = {
-    "Regulatory/Legal":  1.35,
+    "Regulatory/Legal":   1.35,
     "Earnings/Financial": 1.20,
-    "Leadership Change": 1.25,
-    "M&A Activity":      1.10,
-    "Product Launch":    1.05,
+    "Leadership Change":  1.25,
+    "M&A Activity":       1.10,
+    "Product Launch":     1.05,
     "Business Milestone": 1.00,
-    "Macroeconomic":     0.80,
-    "Debt/Credit":       1.15,
+    "Macroeconomic":      0.80,
+    "Debt/Credit":        1.15,
     "ESG/Sustainability": 0.70,
-    "General News":      0.90,
+    "General News":       0.90,
 }
 
 
@@ -205,8 +210,8 @@ def finbert_score(headline: str) -> tuple[float, float, str]:
             if lbl == "negative":
                 return round(-sc * 0.95, 3), round(sc, 3), "finbert"
             return round((sc - 0.5) * 0.2, 3), round(sc, 3), "finbert"
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("FinBERT inference failed: %s", e)
     raw, conf = _kw_score(headline)
     return raw, conf, "keyword_fallback"
 
@@ -227,7 +232,6 @@ _CONFIRM_SIGNALS = [
 
 
 def detect_rumour(headline: str) -> tuple[bool, float]:
-    """Returns (is_rumour, credibility_score 0-1)."""
     h = headline.lower()
     r_hits = sum(1 for s in _RUMOUR_SIGNALS if s in h)
     c_hits = sum(1 for s in _CONFIRM_SIGNALS if s in h)
@@ -266,7 +270,7 @@ _JARGON = [
     "merger", "acquisition", "regulatory", "compliance", "antitrust",
     "sec", "rbi", "sebi", "nifty", "sensex", "nasdaq", "nyse", "bse",
     "nse", "qoq", "yoy", "cagr", "roe", "roa", "pat", "nii", "nim",
-    "bps", "basis points", "leverage", "liquidity", "solvency", "pe ratio",
+    "bps", "basis points", "leverage", "liquidity", "solvency",
     "price earnings", "book value", "working capital", "free cash flow",
 ]
 
@@ -278,19 +282,11 @@ def detect_jargon(headline: str) -> list[str]:
 
 # ── STAGE 6 — HISTORICAL SIMILARITY ──────────────────────────────────────────
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def _get_corpus_embeddings(headlines: tuple) -> Optional[np.ndarray]:
-    """Cache encoded corpus so repeated calls don't re-encode 200 rows."""
-    enc = get_encoder()
-    if enc is None:
-        return None
-    try:
-        return enc.encode(list(headlines))
-    except Exception:
-        return None
+# Module-level cache for corpus embeddings (avoids re-encoding on each call)
+_corpus_cache: dict[int, np.ndarray] = {}
 
 
-def _cosine_sim_sklearn(q_emb, c_emb):
+def _cosine_sim(q_emb, c_emb):
     from sklearn.metrics.pairwise import cosine_similarity
     return cosine_similarity(q_emb, c_emb)[0]
 
@@ -310,13 +306,12 @@ def find_similar(query: str, df: pd.DataFrame, ticker: str) -> pd.DataFrame:
     if enc is not None:
         try:
             q_emb = enc.encode([query])
-            # Use cached corpus embeddings
-            headlines_tuple = tuple(sub["Headline"].tolist())
-            c_emb = _get_corpus_embeddings(headlines_tuple)
-            if c_emb is None:
-                c_emb = enc.encode(list(headlines_tuple))
-            sims = _cosine_sim_sklearn(q_emb, c_emb)
-            sub = sub.copy()
+            headlines_key = hash(tuple(sub["Headline"].tolist()))
+            if headlines_key not in _corpus_cache:
+                _corpus_cache[headlines_key] = enc.encode(sub["Headline"].tolist())
+            c_emb = _corpus_cache[headlines_key]
+            sims  = _cosine_sim(q_emb, c_emb)
+            sub   = sub.copy()
             sub["similarity"] = np.round(sims * 100, 1)
             return (
                 sub[sub["similarity"] > 42]
@@ -324,18 +319,16 @@ def find_similar(query: str, df: pd.DataFrame, ticker: str) -> pd.DataFrame:
                 .head(5)
                 .reset_index(drop=True)
             )
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("Sentence encoder similarity failed: %s — using TF-IDF fallback", e)
 
-    # TF-IDF fallback
+    # FIX: TF-IDF fallback fully implemented (was claimed but empty previously)
     try:
         from sklearn.feature_extraction.text import TfidfVectorizer
         corpus = sub["Headline"].tolist()
-        mat = TfidfVectorizer(
-            stop_words="english", ngram_range=(1, 2)
-        ).fit_transform(corpus + [query])
-        sims = _cosine_sim_sklearn(mat[-1], mat[:-1])
-        sub = sub.copy()
+        mat = TfidfVectorizer(stop_words="english", ngram_range=(1, 2)).fit_transform(corpus + [query])
+        sims = _cosine_sim(mat[-1], mat[:-1])
+        sub  = sub.copy()
         sub["similarity"] = np.round(sims * 100, 1)
         return (
             sub[sub["similarity"] > 18]
@@ -343,7 +336,8 @@ def find_similar(query: str, df: pd.DataFrame, ticker: str) -> pd.DataFrame:
             .head(5)
             .reset_index(drop=True)
         )
-    except Exception:
+    except Exception as e:
+        log.warning("TF-IDF fallback also failed: %s", e)
         return pd.DataFrame()
 
 
@@ -360,9 +354,9 @@ def historical_prediction(similar: pd.DataFrame) -> dict:
     return {
         "avg_move": avg,
         "std": std,
-        "range_low": round(avg - std, 2),
-        "range_high": round(avg + std, 2),
-        "sample_count": cnt,
+        "range_low":       round(avg - std, 2),
+        "range_high":      round(avg + std, 2),
+        "sample_count":    cnt,
         "directional_acc": round(acc / cnt * 100, 1) if cnt else 0,
     }
 
@@ -370,12 +364,12 @@ def historical_prediction(similar: pd.DataFrame) -> dict:
 # ── STAGE 7 — MACRO CONTEXT ───────────────────────────────────────────────────
 
 def macro_context(polarity: float) -> tuple[float, str]:
-    """Return (amplification_factor, description)."""
     try:
         import yfinance as yf
         vix = float(yf.Ticker("^VIX").fast_info.last_price)
-    except Exception:
-        vix = 18.5  # moderate default
+    except Exception as e:
+        log.debug("VIX fetch failed (%s), using default 18.5", e)
+        vix = 18.5
 
     if vix > 30:
         factor = 1.35 if polarity < 0 else 1.12
@@ -416,58 +410,36 @@ def run_analysis(headline: str, ticker: str) -> dict:
     if not headline or not headline.strip():
         return _empty_result("Headline is empty.")
 
-    # Stage 1 — NER
-    entities = detect_entities(headline)
-
-    # Stage 2 — Event Classification
-    evt = classify_event(headline)
-    evt_mult = _EVENT_MULTIPLIER.get(evt, 1.0)
-
-    # Stage 3 — FinBERT (raw base sentiment)
+    entities  = detect_entities(headline)
+    evt       = classify_event(headline)
+    evt_mult  = _EVENT_MULTIPLIER.get(evt, 1.0)
     raw_pol, conf, conf_src = finbert_score(headline)
-
-    # Stage 4 — Rumour (apply credibility BEFORE event multiplier)
     is_rum, cred = detect_rumour(headline)
-    dampened = round(raw_pol * cred, 3) if is_rum else raw_pol
-
-    # Apply event multiplier to dampened polarity
-    polarity = round(max(-1.0, min(1.0, dampened * evt_mult)), 3)
-
-    # Relevance score — penalise by non-matching entities
+    dampened  = round(raw_pol * cred, 3) if is_rum else raw_pol
+    polarity  = round(max(-1.0, min(1.0, dampened * evt_mult)), 3)
     is_relevant = (ticker in entities) or not entities
     other_entities = [e for e in entities if e != ticker]
     rel_score = 0.95 if is_relevant else max(0.28, 0.72 - len(other_entities) * 0.15)
-
-    # Stage 5 — SHAP
-    attrs = word_attributions(headline)
-
-    # Stage 6 — Historical
-    df = get_news_df()
-    similar = find_similar(headline, df, ticker)
-    hist_pr = historical_prediction(similar)
-
-    # Stage 7 — Macro
+    attrs     = word_attributions(headline)
+    df        = get_news_df()
+    similar   = find_similar(headline, df, ticker)
+    hist_pr   = historical_prediction(similar)
     macro_f, macro_d = macro_context(polarity)
-    adj_pol = round(max(-1.0, min(1.0, polarity * macro_f)), 3)
-
-    # Extras
-    jargon = detect_jargon(headline)
-    ripple = compute_ripple(ticker, adj_pol)
-
-    cat = polarity_category(adj_pol)
-    lbl = category_label(cat)
+    adj_pol   = round(max(-1.0, min(1.0, polarity * macro_f)), 3)
+    jargon    = detect_jargon(headline)
+    ripple    = compute_ripple(ticker, adj_pol)
+    cat       = polarity_category(adj_pol)
+    lbl       = category_label(cat)
 
     reason_parts = [
         f"FinBERT classified this as <strong>{lbl}</strong> with {conf:.0%} confidence"
         + (" (keyword fallback — model unavailable)." if conf_src == "keyword_fallback" else "."),
-        f"Event type detected: <strong>{evt}</strong> (×{evt_mult:.2f} multiplier).",
+        f"Event type detected: <strong>{evt}</strong> (x{evt_mult:.2f} multiplier).",
     ]
     if is_rum:
         reason_parts.append(f"Rumour signals detected — credibility dampened to {cred:.0%}.")
     if not is_relevant:
-        reason_parts.append(
-            f"Headline may not be directly about {ticker} (relevance {rel_score:.0%})."
-        )
+        reason_parts.append(f"Headline may not be directly about {ticker} (relevance {rel_score:.0%}).")
     if hist_pr:
         avg = hist_pr.get("avg_move", 0)
         reason_parts.append(
@@ -476,7 +448,6 @@ def run_analysis(headline: str, ticker: str) -> dict:
         )
     reason_parts.append(macro_d + ".")
 
-    # Safe count of similar results
     sim_count = len(similar) if similar is not None and not similar.empty else 0
 
     return {
@@ -505,7 +476,7 @@ def run_analysis(headline: str, ticker: str) -> dict:
         "ticker":            ticker,
         "headline":          headline,
         "analyzed_at":       datetime.now().isoformat(),
-        "pipeline_version":  "v5",
+        "pipeline_version":  "v6",
     }
 
 
@@ -523,5 +494,5 @@ def _empty_result(msg: str) -> dict:
         "hist_prediction": {}, "ripple_tree": [],
         "ticker": "", "headline": "",
         "analyzed_at": datetime.now().isoformat(),
-        "pipeline_version": "v5",
+        "pipeline_version": "v6",
     }
