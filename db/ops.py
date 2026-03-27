@@ -1,16 +1,25 @@
 """
 db/ops.py — All CRUD operations.
-Uses a _conn() context manager so connections are always closed, even on error.
+FIX: _conn() context manager ensures connections always closed.
+FIX: add_watch() correctly distinguishes inserted vs duplicate (rowcount check).
+FIX: _sanitise_result() now handles numpy scalar types properly.
+FIX: get_stats() returns safe zero-filled dict when avg_conf is None.
+FIX: Retry logic on OperationalError (database is locked).
 """
 from __future__ import annotations
 import json
+import time
+import logging
 from contextlib import contextmanager
 from typing import Optional
 
 from db.schema import get_conn
 
+log = logging.getLogger(__name__)
 
-# ── CONNECTION HELPER ─────────────────────────────────────────────────────────
+_MAX_RETRIES = 3
+_RETRY_DELAY = 0.15  # seconds
+
 
 @contextmanager
 def _conn():
@@ -20,6 +29,22 @@ def _conn():
         yield c
     finally:
         c.close()
+
+
+def _retry_write(fn):
+    """Decorator: retry DB writes up to _MAX_RETRIES times on lock errors."""
+    import functools
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        for attempt in range(_MAX_RETRIES):
+            try:
+                return fn(*args, **kwargs)
+            except Exception as e:
+                if "locked" in str(e).lower() and attempt < _MAX_RETRIES - 1:
+                    time.sleep(_RETRY_DELAY)
+                    continue
+                raise
+    return wrapper
 
 
 # ── USERS ─────────────────────────────────────────────────────────────────────
@@ -32,9 +57,8 @@ def get_user(username: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def create_user(
-    username: str, pw_hash: str, email: str = "", role: str = "user"
-) -> bool:
+@_retry_write
+def create_user(username: str, pw_hash: str, email: str = "", role: str = "user") -> bool:
     try:
         with _conn() as c:
             c.execute(
@@ -49,65 +73,76 @@ def create_user(
             )
             c.commit()
         return True
-    except Exception:
+    except Exception as e:
+        log.warning("create_user failed: %s", e)
         return False
 
 
+@_retry_write
 def touch_login(user_id: int) -> None:
     with _conn() as c:
-        c.execute(
-            "UPDATE users SET last_login=datetime('now') WHERE id=?", (user_id,)
-        )
+        c.execute("UPDATE users SET last_login=datetime('now') WHERE id=?", (user_id,))
         c.commit()
 
 
+@_retry_write
 def set_password(user_id: int, pw_hash: str) -> None:
     with _conn() as c:
-        c.execute(
-            "UPDATE users SET password_hash=? WHERE id=?", (pw_hash, user_id)
-        )
+        c.execute("UPDATE users SET password_hash=? WHERE id=?", (pw_hash, user_id))
         c.commit()
 
 
 # ── ANALYSIS HISTORY ──────────────────────────────────────────────────────────
 
 def _sanitise_result(result: dict) -> dict:
-    """Strip non-JSON-serialisable fields (DataFrames) before storing."""
+    """Strip non-JSON-serialisable fields (DataFrames, numpy scalars)."""
+    import numpy as np
     import pandas as pd
 
     clean: dict = {}
     for k, v in result.items():
         if isinstance(v, pd.DataFrame):
             clean[k] = v.to_dict(orient="records") if not v.empty else []
+        elif isinstance(v, (np.integer,)):
+            clean[k] = int(v)
+        elif isinstance(v, (np.floating,)):
+            clean[k] = float(v)
+        elif isinstance(v, np.ndarray):
+            clean[k] = v.tolist()
         else:
             clean[k] = v
     return clean
 
 
-def save_analysis(user_id: int, ticker: str, headline: str, result: dict) -> None:
-    safe = _sanitise_result(result)
-    with _conn() as c:
-        c.execute(
-            """INSERT INTO analysis_history
-               (user_id,ticker,headline,polarity,category,confidence,relevance_score,
-                event_type,is_rumour,credibility,ripple_count,result_json)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (
-                user_id,
-                ticker,
-                headline,
-                result.get("polarity", 0),
-                result.get("category", "NEUTRAL"),
-                result.get("confidence", 0),
-                result.get("relevance_score", 0),
-                result.get("event_type", "General News"),
-                1 if result.get("is_rumour") else 0,
-                result.get("credibility", 1),
-                len(result.get("ripple_tree", [])),
-                json.dumps(safe, default=str),
-            ),
-        )
-        c.commit()
+@_retry_write
+def save_analysis(user_id: int, ticker: str, headline: str, result: dict) -> bool:
+    """Save analysis result. Returns True on success, False on failure."""
+    try:
+        safe = _sanitise_result(result)
+        with _conn() as c:
+            c.execute(
+                """INSERT INTO analysis_history
+                   (user_id,ticker,headline,polarity,category,confidence,relevance_score,
+                    event_type,is_rumour,credibility,ripple_count,result_json)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    user_id, ticker, headline,
+                    result.get("polarity", 0),
+                    result.get("category", "NEUTRAL"),
+                    result.get("confidence", 0),
+                    result.get("relevance_score", 0),
+                    result.get("event_type", "General News"),
+                    1 if result.get("is_rumour") else 0,
+                    result.get("credibility", 1),
+                    len(result.get("ripple_tree", [])),
+                    json.dumps(safe, default=str),
+                ),
+            )
+            c.commit()
+        return True
+    except Exception as e:
+        log.error("save_analysis failed: %s", e)
+        return False
 
 
 def get_history(user_id: int, limit: int = 150) -> list[dict]:
@@ -119,15 +154,16 @@ def get_history(user_id: int, limit: int = 150) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+@_retry_write
 def delete_analysis(item_id: int, user_id: int) -> None:
     with _conn() as c:
         c.execute(
-            "DELETE FROM analysis_history WHERE id=? AND user_id=?",
-            (item_id, user_id),
+            "DELETE FROM analysis_history WHERE id=? AND user_id=?", (item_id, user_id)
         )
         c.commit()
 
 
+@_retry_write
 def clear_history(user_id: int) -> None:
     with _conn() as c:
         c.execute("DELETE FROM analysis_history WHERE user_id=?", (user_id,))
@@ -135,6 +171,7 @@ def clear_history(user_id: int) -> None:
 
 
 def get_stats(user_id: int) -> dict:
+    """FIX: Always returns a safe dict even when avg_conf is None."""
     with _conn() as c:
         row = c.execute(
             """SELECT
@@ -147,7 +184,11 @@ def get_stats(user_id: int) -> dict:
                FROM analysis_history WHERE user_id=?""",
             (user_id,),
         ).fetchone()
-    return dict(row) if row else {}
+    if row is None:
+        return {"total": 0, "positive": 0, "negative": 0, "neutral": 0, "avg_conf": 0.0, "tickers": 0}
+    d = dict(row)
+    d["avg_conf"] = float(d.get("avg_conf") or 0.0)
+    return d
 
 
 # ── WATCHLIST ─────────────────────────────────────────────────────────────────
@@ -155,35 +196,39 @@ def get_stats(user_id: int) -> dict:
 def get_watchlist(user_id: int) -> list[dict]:
     with _conn() as c:
         rows = c.execute(
-            "SELECT * FROM watchlist WHERE user_id=? ORDER BY added_at DESC",
-            (user_id,),
+            "SELECT * FROM watchlist WHERE user_id=? ORDER BY added_at DESC", (user_id,)
         ).fetchall()
     return [dict(r) for r in rows]
 
 
+@_retry_write
 def add_watch(user_id: int, ticker: str, company: str = "", notes: str = "") -> bool:
+    """FIX: Returns True only when a new row was actually inserted."""
     try:
         with _conn() as c:
-            c.execute(
+            cur = c.execute(
                 "INSERT OR IGNORE INTO watchlist (user_id,ticker,company_name,notes) VALUES (?,?,?,?)",
                 (user_id, ticker.upper(), company, notes),
             )
             c.commit()
-        return True
-    except Exception:
+            return cur.rowcount > 0  # True = inserted, False = already existed
+    except Exception as e:
+        log.warning("add_watch failed: %s", e)
         return False
 
 
+@_retry_write
 def remove_watch(user_id: int, ticker: str) -> None:
     with _conn() as c:
         c.execute(
-            "DELETE FROM watchlist WHERE user_id=? AND ticker=?",
-            (user_id, ticker.upper()),
+            "DELETE FROM watchlist WHERE user_id=? AND ticker=?", (user_id, ticker.upper())
         )
         c.commit()
 
 
 def in_watchlist(user_id: int, ticker: str) -> bool:
+    if not user_id:
+        return False
     with _conn() as c:
         r = c.execute(
             "SELECT id FROM watchlist WHERE user_id=? AND ticker=?",
@@ -209,6 +254,7 @@ def get_settings(user_id: int) -> dict:
     }
 
 
+@_retry_write
 def save_settings(user_id: int, s: dict) -> None:
     with _conn() as c:
         c.execute(
@@ -232,12 +278,12 @@ def save_settings(user_id: int, s: dict) -> None:
 def get_active_alerts(user_id: int) -> list[dict]:
     with _conn() as c:
         rows = c.execute(
-            "SELECT * FROM price_alerts WHERE user_id=? AND triggered=0",
-            (user_id,),
+            "SELECT * FROM price_alerts WHERE user_id=? AND triggered=0", (user_id,)
         ).fetchall()
     return [dict(r) for r in rows]
 
 
+@_retry_write
 def add_alert(user_id: int, ticker: str, target: float, direction: str = "above") -> bool:
     try:
         with _conn() as c:
@@ -247,16 +293,19 @@ def add_alert(user_id: int, ticker: str, target: float, direction: str = "above"
             )
             c.commit()
         return True
-    except Exception:
+    except Exception as e:
+        log.warning("add_alert failed: %s", e)
         return False
 
 
+@_retry_write
 def mark_alert_triggered(alert_id: int) -> None:
     with _conn() as c:
         c.execute("UPDATE price_alerts SET triggered=1 WHERE id=?", (alert_id,))
         c.commit()
 
 
+@_retry_write
 def delete_alert(alert_id: int, user_id: int) -> None:
     with _conn() as c:
         c.execute(
