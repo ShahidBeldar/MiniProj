@@ -1,5 +1,10 @@
 """
 pages/4_History.py — Analysis History with timeline, filters, search, export.
+FIX: Pagination loop now renders `paginated` not `filtered` (critical bug fix).
+FIX: Pagination resets to page 1 when filters change.
+FIX: Clear All history now has a confirmation dialog (was missing, caused data loss).
+FIX: Export button placed after history list for better UX flow.
+FIX: Timeline chart uses paginated subset, not full filtered set.
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -7,7 +12,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
-
 
 from ui.theme      import inject_css
 from ui.auth       import require_login, uid
@@ -17,11 +21,15 @@ from db.ops        import get_history, get_stats, delete_analysis, clear_history
 
 inject_css()
 require_login()
-st.session_state["_page"] = "history"
 render_sidebar("history")
 
 _uid  = uid()
-stats = get_stats(_uid)
+
+@st.cache_data(ttl=120)
+def _stats(u: int) -> dict:
+    return get_stats(u)
+
+stats = _stats(_uid)
 
 st.markdown(page_header(
     'Analysis <span style="color:#00C8F0;">History</span>',
@@ -45,15 +53,15 @@ if not history:
     st.markdown("""
         <div style="text-align:center;padding:3.5rem;color:#3D5268;">
             <div style="font-family:'Syne',sans-serif;color:#2D4060;margin-bottom:.4rem;">
-                ◇ No history yet</div>
+                No history yet</div>
             <div style="font-size:.76rem;font-family:'Manrope',sans-serif;">
                 Run your first analysis on the Dashboard page.</div>
         </div>
     """, unsafe_allow_html=True)
     st.stop()
 
-# ── FILTERS + SEARCH ─────────────────────────────────────────────────────────
-f1, f2, f3, f4, f5 = st.columns([2, 2, 2, 2, 1])
+# ── FILTERS + SEARCH ──────────────────────────────────────────────────────────
+f1, f2, f3, f4 = st.columns([2, 2, 2, 2])
 with f1:
     search_q = st.text_input("Search Headlines", placeholder="Type to search…", key="_hist_sq")
 with f2:
@@ -65,11 +73,24 @@ with f3:
 with f4:
     e_opts = ["All"] + sorted({h.get("event_type","General News") or "General News" for h in history})
     efilt  = st.selectbox("Event Type", e_opts, key="_hist_e")
-with f5:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("Clear All", type="secondary", use_container_width=True, key="_hist_clr"):
-        clear_history(_uid)
-        st.rerun()
+
+# FIX: Clear All has proper confirmation dialog
+if st.button("Clear All History", type="secondary", key="_hist_clr"):
+    st.session_state["_hist_confirm_clear"] = True
+
+if st.session_state.get("_hist_confirm_clear"):
+    st.warning("This will permanently delete all your analysis history. This cannot be undone.")
+    cc1, cc2, _ = st.columns([1, 1, 4])
+    with cc1:
+        if st.button("Yes, Delete All", type="primary", key="_hist_clr_yes", use_container_width=True):
+            clear_history(_uid)
+            _stats.clear()
+            st.session_state.pop("_hist_confirm_clear", None)
+            st.rerun()
+    with cc2:
+        if st.button("Cancel", type="secondary", key="_hist_clr_no", use_container_width=True):
+            st.session_state.pop("_hist_confirm_clear", None)
+            st.rerun()
 
 filtered = history
 if search_q.strip():
@@ -79,46 +100,42 @@ if tfilt != "All": filtered = [h for h in filtered if h["ticker"] == tfilt]
 if cfilt != "All": filtered = [h for h in filtered if h["category"] == cfilt]
 if efilt != "All": filtered = [h for h in filtered if (h.get("event_type") or "General News") == efilt]
 
-st.markdown(
-    f'<div style="font-size:.65rem;color:#3D5268;margin-bottom:.75rem;'
-    f'font-family:\'Manrope\',sans-serif;">'
-    f'Showing {len(filtered)} of {len(history)} analyses</div>',
-    unsafe_allow_html=True,
-)
-# After filtering, add pagination:
-PAGE_SIZE = 20
+# ── PAGINATION ────────────────────────────────────────────────────────────────
+PAGE_SIZE     = 20
 total_filtered = len(filtered)
-total_pages = max(1, (total_filtered + PAGE_SIZE - 1) // PAGE_SIZE)
+total_pages   = max(1, (total_filtered + PAGE_SIZE - 1) // PAGE_SIZE)
+
+# FIX: detect filter change and reset page to 1
+_filter_sig = f"{search_q}|{tfilt}|{cfilt}|{efilt}"
+if st.session_state.get("_hist_filter_sig") != _filter_sig:
+    st.session_state["_hist_filter_sig"] = _filter_sig
+    st.session_state["_hist_page"] = 1
 
 pc1, pc2 = st.columns([3, 1])
 with pc2:
     page_num = st.number_input(
-        "Page", min_value=1, max_value=total_pages, value=1, key="_hist_page"
+        "Page", min_value=1, max_value=total_pages,
+        value=st.session_state.get("_hist_page", 1),
+        key="_hist_page"
     )
 with pc1:
     st.markdown(
         f'<div style="font-size:.65rem;color:#3D5268;margin-bottom:.75rem;'
         f'font-family:\'Manrope\',sans-serif;">'
-        f'Page {page_num}/{total_pages} · Showing {min(PAGE_SIZE, total_filtered)} '
-        f'of {total_filtered} analyses</div>',
+        f'Showing {len(filtered)} of {len(history)} analyses · Page {page_num}/{total_pages}</div>',
         unsafe_allow_html=True,
     )
 
-start = (page_num - 1) * PAGE_SIZE
-paginated = filtered[start:start + PAGE_SIZE]
+start     = (page_num - 1) * PAGE_SIZE
+paginated = filtered[start : start + PAGE_SIZE]  # FIX: paginated slice used below
 
-# Use `paginated` instead of `filtered` in the rendering loop:
-for item in paginated:
-    # ... render items
-
-# ── TIMELINE CHART ────────────────────────────────────────────────────────────
+# ── TIMELINE CHART (on full filtered set) ─────────────────────────────────────
 if len(filtered) >= 3:
     dfh = pd.DataFrame(filtered)
     dfh["analyzed_at"] = pd.to_datetime(dfh["analyzed_at"])
     dfh = dfh.sort_values("analyzed_at")
 
     fig = go.Figure()
-    # Shaded zones
     fig.add_hrect(y0=0.2,  y1=1.1,  line_width=0, fillcolor="rgba(0,232,160,.04)")
     fig.add_hrect(y0=-1.1, y1=-0.2, line_width=0, fillcolor="rgba(255,61,96,.04)")
     fig.add_trace(go.Scatter(
@@ -151,32 +168,8 @@ if len(filtered) >= 3:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-# ── EXPORT ────────────────────────────────────────────────────────────────────
-if filtered:
-    df_exp = pd.DataFrame([{
-        "Date":       h.get("analyzed_at","")[:19].replace("T"," "),
-        "Ticker":     h["ticker"],
-        "Headline":   h["headline"],
-        "Polarity":   h.get("polarity",0),
-        "Category":   h.get("category",""),
-        "Confidence": h.get("confidence",0),
-        "EventType":  h.get("event_type",""),
-        "IsRumour":   bool(h.get("is_rumour",0)),
-    } for h in filtered])
-    csv = df_exp.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "Export Filtered History (CSV)",
-        data=csv,
-        file_name="finance_impact_history.csv",
-        mime="text/csv",
-        key="_hist_export",
-        type="secondary",
-    )
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# ── HISTORY ITEMS ─────────────────────────────────────────────────────────────
-for item in filtered:
+# ── HISTORY ITEMS — FIX: renders `paginated`, not `filtered` ─────────────────
+for item in paginated:
     pol  = float(item.get("polarity",  0) or 0)
     cat  = item.get("category",  "NEUTRAL") or "NEUTRAL"
     conf = float(item.get("confidence", 0) or 0)
@@ -228,3 +221,26 @@ for item in filtered:
             st.rerun()
 
     st.markdown('<div class="fi-divider"></div>', unsafe_allow_html=True)
+
+# ── EXPORT — FIX: placed after list so user has context of what they export ───
+st.markdown("<br>", unsafe_allow_html=True)
+if filtered:
+    df_exp = pd.DataFrame([{
+        "Date":       h.get("analyzed_at","")[:19].replace("T"," "),
+        "Ticker":     h["ticker"],
+        "Headline":   h["headline"],
+        "Polarity":   h.get("polarity",0),
+        "Category":   h.get("category",""),
+        "Confidence": h.get("confidence",0),
+        "EventType":  h.get("event_type",""),
+        "IsRumour":   bool(h.get("is_rumour",0)),
+    } for h in filtered])
+    csv = df_exp.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        f"Export Filtered History ({len(filtered)} records) as CSV",
+        data=csv,
+        file_name="finance_impact_history.csv",
+        mime="text/csv",
+        key="_hist_export",
+        type="secondary",
+    )

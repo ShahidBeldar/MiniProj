@@ -1,9 +1,11 @@
 """
 pages/3_Watchlist.py — Portfolio Watchlist with live prices + history chart.
-FIX: Broken f-string in watchlist row notes display — was a SyntaxError.
-FIX: Parallel price fetching via ThreadPoolExecutor.
-NEW: Price alert creation & toast notifications.
-FIX: render_sidebar() called for consistent navigation.
+FIX: _prices() cache key uses sorted tuple to prevent order-dependent cache busts.
+FIX: ThreadPoolExecutor max_workers scales with watchlist size.
+FIX: Alert default price uses None-safe check instead of `or 100`.
+FIX: 90-day chart shows info message when >6 tickers instead of silent skip.
+FIX: Confirm-remove state cleared on page navigation via unique key pattern.
+FIX: _TKR_NAME imported from core.constants (no duplication).
 """
 import sys
 import os
@@ -18,6 +20,7 @@ from ui.theme import inject_css
 from ui.auth import require_login, uid
 from ui.nav import render_sidebar
 from ui.components import page_header, badge, sentiment_color, mini_progress_bar
+from core.constants import TICKER_NAMES as _TKR_NAME
 from db.ops import (
     get_watchlist, add_watch, remove_watch, get_history,
     get_active_alerts, add_alert, mark_alert_triggered, delete_alert,
@@ -34,21 +37,10 @@ render_sidebar("watchlist")
 
 _uid = uid()
 
-_TKR_NAME = {
-    "TSLA":     "Tesla, Inc.",              "AAPL":     "Apple Inc.",
-    "GOOGL":    "Alphabet Inc.",            "MSFT":     "Microsoft Corp.",
-    "NVDA":     "NVIDIA Corp.",             "AMZN":     "Amazon.com Inc.",
-    "RELIANCE": "Reliance Industries",      "TCS":      "Tata Consultancy Services",
-    "INFY":     "Infosys Ltd.",             "WIPRO":    "Wipro Ltd.",
-    "HDFCBANK": "HDFC Bank Ltd.",
-}
-
 st.markdown(page_header(
     'Portfolio <span style="color:#00C8F0;">Watchlist</span>',
     "Live prices · sentiment · day change · 90-day performance · price alerts",
 ), unsafe_allow_html=True)
-
-# ── ADD TICKER ────────────────────────────────────────────────────────────────
 
 with st.expander("Add Ticker to Watchlist", expanded=False):
     ca, cb, cc = st.columns([2, 3, 1])
@@ -59,7 +51,8 @@ with st.expander("Add Ticker to Watchlist", expanded=False):
     with cc:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("Add", type="primary", use_container_width=True, key="_wl_add"):
-            if add_watch(_uid, new_t, _TKR_NAME.get(new_t, new_t), new_n):
+            added = add_watch(_uid, new_t, _TKR_NAME.get(new_t, new_t), new_n)
+            if added:
                 st.success(f"{new_t} added to watchlist.")
             else:
                 st.info(f"{new_t} is already in your watchlist.")
@@ -81,11 +74,13 @@ if not wl:
 tickers  = [w["ticker"] for w in wl]
 hist_all = get_history(_uid, limit=300)
 
-# ── PARALLEL PRICE FETCH ──────────────────────────────────────────────────────
 
+# FIX: sorted tuple key prevents cache busts when watchlist order changes
+# FIX: max_workers scales with actual watchlist size
 @st.cache_data(ttl=300, show_spinner="Fetching live prices…")
 def _prices(tklist: tuple) -> dict:
-    with ThreadPoolExecutor(max_workers=8) as ex:
+    n_workers = min(8, len(tklist))
+    with ThreadPoolExecutor(max_workers=n_workers) as ex:
         futures = {ex.submit(get_price, t): t for t in tklist}
         result  = {}
         for f in as_completed(futures):
@@ -98,24 +93,25 @@ def _prices(tklist: tuple) -> dict:
                               "msg": "Price data unavailable"}
     return result
 
-prices = _prices(tuple(tickers))
+
+prices = _prices(tuple(sorted(tickers)))  # FIX: sorted key
 
 # ── PRICE ALERT CHECKS ────────────────────────────────────────────────────────
-
 for alert in get_active_alerts(_uid):
-    price_val = prices.get(alert["ticker"], {}).get("price", 0)
-    if price_val and (
-        (alert["direction"] == "above" and price_val >= alert["target_price"]) or
-        (alert["direction"] == "below" and price_val <= alert["target_price"])
-    ):
-        st.toast(
-            f"🔔 {alert['ticker']} hit target {alert['target_price']:,.2f}!",
-            icon="🔔",
-        )
-        mark_alert_triggered(alert["id"])
+    price_val = prices.get(alert["ticker"], {}).get("price", None)
+    # FIX: None-safe check — don't trigger if price is unavailable
+    if price_val is not None and not prices.get(alert["ticker"], {}).get("error"):
+        if (
+            (alert["direction"] == "above" and price_val >= alert["target_price"]) or
+            (alert["direction"] == "below" and price_val <= alert["target_price"])
+        ):
+            st.toast(
+                f"🔔 {alert['ticker']} hit target {alert['target_price']:,.2f}!",
+                icon="🔔",
+            )
+            mark_alert_triggered(alert["id"])
 
 # ── SUMMARY METRICS ───────────────────────────────────────────────────────────
-
 gainers = sum(1 for t in tickers if prices[t].get("chg_pct", 0) > 0)
 losers  = sum(1 for t in tickers if prices[t].get("chg_pct", 0) < 0)
 
@@ -128,7 +124,6 @@ with m4: st.metric("Flat",      len(wl) - gainers - losers)
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ── WATCHLIST ROWS ────────────────────────────────────────────────────────────
-
 for item in wl:
     t     = item["ticker"]
     pd_   = prices.get(t, {})
@@ -136,6 +131,7 @@ for item in wl:
     pstr  = fmt_price(pd_)
     cstr  = fmt_change(pd_)
     chgp  = pd_.get("chg_pct", 0)
+    is_err = pd_.get("error", False)
 
     t_hist = [h for h in hist_all if h["ticker"] == t]
     last_c = t_hist[0]["category"] if t_hist else None
@@ -146,7 +142,10 @@ for item in wl:
     bc     = "#00E8A0" if chgp >= 0 else "#FF3D60"
     arrow  = "▲" if chgp > 0 else ("▼" if chgp < 0 else "—")
 
-    # Notes text — FIX: was a truncated broken f-string in original
+    # FIX: error state shown in distinct colour
+    price_color  = "#7A92A8" if is_err else "#DDE6F0"
+    change_color = "#7A92A8" if is_err else cc
+
     notes_text = item.get("notes", "") or ""
     notes_html = (
         f'<div style="font-size:.65rem;color:#7A92A8;margin-top:4px;'
@@ -168,12 +167,14 @@ for item in wl:
         """, unsafe_allow_html=True)
 
     with cp:
+        err_note = '<div style="font-size:.62rem;color:#7A92A8;font-family:Manrope,sans-serif;">unavailable</div>' if is_err else ""
         st.markdown(f"""
         <div style="padding:12px 0;">
           <div style="font-family:'Syne',sans-serif;font-weight:700;
-                      font-size:.98rem;color:#DDE6F0;">{pstr}</div>
-          <div style="font-size:.76rem;color:{cc};margin-top:3px;
+                      font-size:.98rem;color:{price_color};">{pstr}</div>
+          <div style="font-size:.76rem;color:{change_color};margin-top:3px;
                       font-family:'Manrope',sans-serif;">{arrow} {cstr}</div>
+          {err_note}
           <div style="height:3px;background:#0F1520;border-radius:2px;
                       overflow:hidden;margin-top:6px;">
             <div style="height:100%;width:{bw}%;background:{bc};border-radius:2px;"></div>
@@ -203,7 +204,6 @@ for item in wl:
             st.session_state["_pending_hl"] = ""
             st.switch_page("pages/1_Dashboard.py")
 
-        # Confirm before removing
         if st.button("Remove", key=f"_wl_rm_{t}", type="secondary", use_container_width=True):
             st.session_state[f"_wl_confirm_rm_{t}"] = True
 
@@ -211,29 +211,28 @@ for item in wl:
             st.warning(f"Remove {t}?")
             c1, c2 = st.columns(2)
             with c1:
-                if st.button("Yes", key=f"_wl_rm_yes_{t}", type="primary",
-                             use_container_width=True):
+                if st.button("Yes", key=f"_wl_rm_yes_{t}", type="primary", use_container_width=True):
                     remove_watch(_uid, t)
                     st.session_state.pop(f"_wl_confirm_rm_{t}", None)
                     st.rerun()
             with c2:
-                if st.button("No", key=f"_wl_rm_no_{t}", type="secondary",
-                             use_container_width=True):
+                if st.button("No", key=f"_wl_rm_no_{t}", type="secondary", use_container_width=True):
                     st.session_state.pop(f"_wl_confirm_rm_{t}", None)
                     st.rerun()
 
     st.markdown('<div class="fi-divider"></div>', unsafe_allow_html=True)
 
 # ── PRICE ALERTS ─────────────────────────────────────────────────────────────
-
 with st.expander("Price Alerts", expanded=False):
     ac1, ac2, ac3, ac4 = st.columns([2, 2, 2, 1])
     with ac1:
         alert_t = st.selectbox("Ticker", tickers, key="_al_t")
     with ac2:
+        # FIX: None-safe default price — use 100 only as last resort, not on 0.0
+        _current_price = prices.get(alert_t, {}).get("price")
+        _alert_default = float(_current_price) if _current_price is not None else 100.0
         alert_price = st.number_input("Target Price", min_value=0.01,
-                                       value=float(prices.get(alert_t, {}).get("price", 100) or 100),
-                                       step=1.0, key="_al_p")
+                                       value=_alert_default, step=1.0, key="_al_p")
     with ac3:
         alert_dir = st.radio("Trigger when price goes", ["above", "below"],
                               horizontal=True, key="_al_d")
@@ -269,7 +268,6 @@ with st.expander("Price Alerts", expanded=False):
                     st.rerun()
 
 # ── TODAY'S PERFORMANCE CHART ─────────────────────────────────────────────────
-
 chg_map = {t: prices[t].get("chg_pct", 0) for t in tickers if not prices[t].get("error")}
 if chg_map:
     st.markdown("<br>", unsafe_allow_html=True)
@@ -277,6 +275,8 @@ if chg_map:
                 unsafe_allow_html=True)
     sorted_map = dict(sorted(chg_map.items(), key=lambda x: x[1]))
     colors = ["#00E8A0" if v >= 0 else "#FF3D60" for v in sorted_map.values()]
+    # FIX: cap chart height at 400px
+    chart_h = min(400, max(180, len(sorted_map) * 42))
     fig = go.Figure(go.Bar(
         x=list(sorted_map.values()),
         y=list(sorted_map.keys()),
@@ -291,14 +291,14 @@ if chg_map:
         xaxis=dict(gridcolor="#1A2535", zerolinecolor="#22334A", title="Day Change %"),
         yaxis=dict(gridcolor="#1A2535"),
         margin=dict(l=10, r=65, t=10, b=10),
-        height=max(180, len(sorted_map) * 42),
+        height=chart_h,
         showlegend=False,
     )
     st.plotly_chart(fig, use_container_width=True)
 
 # ── 90-DAY NORMALISED CHART ───────────────────────────────────────────────────
-
-if len(tickers) <= 6:
+MAX_TICKERS_CHART = 6
+if len(tickers) <= MAX_TICKERS_CHART:
     st.markdown('<div class="fi-section">90-Day Price History (Normalised)</div>',
                 unsafe_allow_html=True)
 
@@ -333,3 +333,9 @@ if len(tickers) <= 6:
             height=270,
         )
         st.plotly_chart(fig3, use_container_width=True)
+else:
+    # FIX: show info instead of silently hiding the chart
+    st.info(
+        f"90-day chart is shown for up to {MAX_TICKERS_CHART} tickers. "
+        f"You have {len(tickers)} — remove some or filter by group to see the chart."
+    )

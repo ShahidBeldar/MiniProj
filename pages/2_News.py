@@ -1,6 +1,8 @@
 """
 pages/2_News.py — Live RSS News Feed with click-to-analyze.
-FIX: _load.clear() used instead of st.cache_data.clear() — scoped to this feed only.
+FIX: _load.clear() called correctly (function defined before usage).
+FIX: Ticker filter uses exact word matching via split, not str.contains.
+FIX: Strongest Signals sidebar shows top 5 by absolute polarity (not just positive).
 FIX: Parallel feed fetching via core/feeds.py ThreadPoolExecutor.
 FIX: render_sidebar() called for consistent navigation.
 """
@@ -16,6 +18,7 @@ from ui.auth import require_login
 from ui.nav import render_sidebar
 from ui.components import page_header, badge, news_card, sentiment_color
 from core.feeds import fetch_news, sentiment_dot_color
+import pandas as pd
 
 inject_css()
 require_login()
@@ -27,7 +30,6 @@ st.markdown(page_header(
 ), unsafe_allow_html=True)
 
 # ── FILTERS ───────────────────────────────────────────────────────────────────
-
 f1, f2, f3, f4 = st.columns([2, 2, 1, 1])
 with f1:
     sf = st.selectbox(
@@ -49,24 +51,28 @@ with f4:
     refresh = st.button("Refresh Feed", type="secondary",
                         use_container_width=True, key="_nf_ref")
 
-# ── DATA LOAD ─────────────────────────────────────────────────────────────────
-
+# ── DATA LOAD — FIX: _load defined before the refresh check ──────────────────
 @st.cache_data(ttl=600, show_spinner="Fetching headlines…")
 def _load():
     return fetch_news(max_items=60)
 
-# FIX: clear only this function's cache — not the entire app's cache
+
 if refresh:
     _load.clear()
 
 df = _load()
 
 # ── APPLY FILTERS ─────────────────────────────────────────────────────────────
-
 if sf != "All":
     df = df[df["sentiment"] == sf]
+
+# FIX: exact token-level ticker match instead of str.contains (prevents "TCS" matching "HDFC+TCS")
 if tf != "All":
-    df = df[df["tickers"].str.contains(tf, na=False)]
+    def _has_ticker(t_str: str) -> bool:
+        tokens = [x.strip() for x in str(t_str).split(",")]
+        return tf in tokens
+    df = df[df["tickers"].apply(_has_ticker)]
+
 if rumour_only:
     df = df[df["is_rumour"] == True]
 
@@ -75,7 +81,6 @@ if df.empty:
     st.stop()
 
 # ── METRICS ───────────────────────────────────────────────────────────────────
-
 tot   = len(df)
 n_pos = int((df["polarity"] > 0.1).sum())
 n_neg = int((df["polarity"] < -0.1).sum())
@@ -91,7 +96,6 @@ with m5: st.metric("Rumours",   n_rum)
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ── TWO-COLUMN LAYOUT ─────────────────────────────────────────────────────────
-
 feed_col, side_col = st.columns([3, 1])
 
 with feed_col:
@@ -144,13 +148,16 @@ with side_col:
     st.plotly_chart(fig, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Strongest signals
+    # FIX: Strongest signals by absolute polarity (shows both extremes)
     st.markdown(
         '<div class="fi-card" style="margin-top:.85rem;">'
         '<div class="fi-title">Strongest Signals</div>',
         unsafe_allow_html=True,
     )
-    top5 = df.nlargest(5, "polarity") if len(df) >= 5 else df
+    top5 = (
+        df.reindex(df["polarity"].abs().nlargest(5).index)
+        if len(df) >= 5 else df
+    )
     for _, row in top5.iterrows():
         p = float(row.get("polarity", 0))
         c = "#00E8A0" if p > 0 else "#FF3D60"
@@ -164,20 +171,19 @@ with side_col:
         """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Ticker coverage
+    # Ticker coverage — pandas imported at top of file, not inline
     st.markdown(
         '<div class="fi-card" style="margin-top:.85rem;">'
         '<div class="fi-title">Ticker Coverage</div>',
         unsafe_allow_html=True,
     )
-    import pandas as pd_inner
     all_tkrs: list[str] = []
     for t in df["tickers"].fillna(""):
         all_tkrs.extend(
             [x.strip() for x in t.split(",") if x.strip() and x.strip() != "GENERAL"]
         )
     if all_tkrs:
-        tkr_counts = pd_inner.Series(all_tkrs).value_counts().head(8)
+        tkr_counts = pd.Series(all_tkrs).value_counts().head(8)
         for tkr, cnt in tkr_counts.items():
             st.markdown(f"""
             <div style="display:flex;justify-content:space-between;padding:4px 0;

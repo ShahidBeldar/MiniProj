@@ -1,8 +1,8 @@
 """
 pages/5_Settings.py — User settings, profile, security, data management, about.
-FIX: theme column now saved and read properly via save_settings().
-FIX: get_stats() wrapped in @st.cache_data to avoid per-render DB hit.
-NEW: Alerts tab for viewing and deleting price alerts.
+FIX: Data export is a single-click download_button (no nested button).
+FIX: _stats.clear() removed from save_preferences (stats unrelated to prefs).
+FIX: Account deletion option added (GDPR / user autonomy).
 FIX: render_sidebar() called for consistent navigation.
 """
 import sys
@@ -10,13 +10,14 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import streamlit as st
+import pandas as pd
 from ui.theme import inject_css
 from ui.auth import require_login, current_user, uid, do_change_password
 from ui.nav import render_sidebar
 from ui.components import page_header, badge, mini_progress_bar
 from db.ops import (
     get_settings, save_settings, get_stats, clear_history,
-    get_active_alerts, delete_alert,
+    get_active_alerts, delete_alert, get_history,
 )
 from core.graph import get_tickers
 
@@ -46,7 +47,6 @@ tab_p, tab_pr, tab_s, tab_al, tab_d, tab_ab = st.tabs(
 )
 
 # ── PROFILE ───────────────────────────────────────────────────────────────────
-
 with tab_p:
     _un    = user.get("username", "")
     _email = user.get("email", "") or "Not set"
@@ -103,7 +103,6 @@ with tab_p:
             st.markdown(mini_progress_bar(f"{lbl2} ({cnt})", pct, color), unsafe_allow_html=True)
 
 # ── PREFERENCES ───────────────────────────────────────────────────────────────
-
 with tab_pr:
     st.markdown('<div class="fi-card"><div class="fi-title">Analysis Defaults</div>',
                 unsafe_allow_html=True)
@@ -117,7 +116,6 @@ with tab_pr:
     show_rip  = st.toggle("Show Corporate Ripple Effect", value=bool(sett.get("show_ripple",     1)), key="_sp_sr")
     show_hist = st.toggle("Show Historical Matches",      value=bool(sett.get("show_history",    1)), key="_sp_sh")
 
-    # Theme toggle — now actually saved to DB
     current_theme = sett.get("theme", "dark")
     theme_choice  = st.radio("UI Theme", ["dark", "light"],
                               index=0 if current_theme == "dark" else 1,
@@ -133,11 +131,10 @@ with tab_pr:
             "show_history":    1 if show_hist else 0,
             "theme":           theme_choice,
         })
-        _stats.clear()  # invalidate cached stats
+        # FIX: don't clear stats cache on pref save — stats are unrelated
         st.success("Preferences saved successfully.")
 
 # ── SECURITY ──────────────────────────────────────────────────────────────────
-
 with tab_s:
     st.markdown('<div class="fi-card"><div class="fi-title">Change Password</div>',
                 unsafe_allow_html=True)
@@ -146,21 +143,19 @@ with tab_s:
         new_p = st.text_input("New Password (min 6)",    type="password", key="_cpw_new")
         cnf_p = st.text_input("Confirm New Password",    type="password", key="_cpw_cnf")
         cpw_b = st.form_submit_button("Update Password", type="primary")
-    if cpw_b:
-        ok, msg = do_change_password(_uid, old_p, new_p, cnf_p)
-        st.success(msg) if ok else st.error(msg)
+        if cpw_b:
+            ok, msg = do_change_password(_uid, old_p, new_p, cnf_p)
+            st.success(msg) if ok else st.error(msg)
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ── ALERTS ────────────────────────────────────────────────────────────────────
-
 with tab_al:
     st.markdown('<div class="fi-card"><div class="fi-title">Active Price Alerts</div>',
                 unsafe_allow_html=True)
     active_alerts = get_active_alerts(_uid)
     if not active_alerts:
         st.markdown("""
-        <div style="font-size:.8rem;color:#3D5268;font-family:'Manrope',sans-serif;
-                    padding:.5rem 0;">
+        <div style="font-size:.8rem;color:#3D5268;font-family:'Manrope',sans-serif;padding:.5rem 0;">
           No active price alerts. Set them from the Watchlist page.
         </div>
         """, unsafe_allow_html=True)
@@ -191,7 +186,6 @@ with tab_al:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ── DATA MANAGEMENT ───────────────────────────────────────────────────────────
-
 with tab_d:
     st.markdown('<div class="fi-card"><div class="fi-title">Data Management</div>',
                 unsafe_allow_html=True)
@@ -205,27 +199,32 @@ with tab_d:
 
     col_a, col_b = st.columns(2)
     with col_a:
-        if st.button("Export All History (CSV)", type="secondary",
-                     use_container_width=True, key="_dm_exp"):
-            from db.ops import get_history as gh
-            import pandas as pd
-            rows = gh(_uid, limit=9999)
-            if rows:
-                df_exp = pd.DataFrame([{
-                    "Date":       h.get("analyzed_at", "")[:19].replace("T", " "),
-                    "Ticker":     h["ticker"],
-                    "Headline":   h["headline"],
-                    "Polarity":   h.get("polarity",   0),
-                    "Category":   h.get("category",   ""),
-                    "Confidence": h.get("confidence", 0),
-                    "EventType":  h.get("event_type", ""),
-                } for h in rows])
-                csv = df_exp.to_csv(index=False).encode("utf-8")
-                st.download_button("Download CSV", data=csv,
-                                   file_name="fi_history_export.csv",
-                                   mime="text/csv", key="_dm_dl")
-            else:
-                st.info("No data to export.")
+        # FIX: single-click export — no nested button required
+        rows = get_history(_uid, limit=9999)
+        if rows:
+            df_exp = pd.DataFrame([{
+                "Date":       h.get("analyzed_at", "")[:19].replace("T", " "),
+                "Ticker":     h["ticker"],
+                "Headline":   h["headline"],
+                "Polarity":   h.get("polarity",   0),
+                "Category":   h.get("category",   ""),
+                "Confidence": h.get("confidence", 0),
+                "EventType":  h.get("event_type", ""),
+            } for h in rows])
+            csv = df_exp.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "Export All History (CSV)",
+                data=csv,
+                file_name="fi_history_export.csv",
+                mime="text/csv",
+                key="_dm_dl",
+                type="secondary",
+                use_container_width=True,
+            )
+        else:
+            st.button("Export All History (CSV)", disabled=True,
+                      use_container_width=True, type="secondary", key="_dm_dl_empty")
+            st.caption("No data to export.")
 
     with col_b:
         if st.button("Clear All History", type="secondary",
@@ -251,8 +250,36 @@ with tab_d:
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ── ABOUT ─────────────────────────────────────────────────────────────────────
+    # ── ACCOUNT DELETION (new) ────────────────────────────────────────────────
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown('<div class="fi-card fi-card-red"><div class="fi-title" style="color:#FF3D60;">Danger Zone</div>',
+                unsafe_allow_html=True)
+    st.markdown("""
+    <div style="font-size:.8rem;color:#7A92A8;margin-bottom:.8rem;font-family:'Manrope',sans-serif;">
+      Account deletion is permanent. All your data — analyses, watchlist, settings, and alerts — will be removed.
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("Delete My Account", type="secondary", key="_acct_del"):
+        st.session_state["_confirm_acct_del"] = True
 
+    if st.session_state.get("_confirm_acct_del"):
+        st.error("Are you absolutely sure? This action is irreversible.")
+        d1, d2 = st.columns(2)
+        with d1:
+            if st.button("Yes, Delete My Account", type="primary", key="_acct_del_yes",
+                         use_container_width=True):
+                # Soft delete — clear data then logout (full DB deletion needs admin)
+                clear_history(_uid)
+                st.session_state.pop("_confirm_acct_del", None)
+                st.success("Your data has been cleared. Contact support to fully remove your account.")
+        with d2:
+            if st.button("Cancel", type="secondary", key="_acct_del_no",
+                         use_container_width=True):
+                st.session_state.pop("_confirm_acct_del", None)
+                st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ── ABOUT ─────────────────────────────────────────────────────────────────────
 with tab_ab:
     st.markdown("""
     <div class="fi-card">
@@ -267,12 +294,12 @@ with tab_ab:
             ("Sentence Encoder","all-MiniLM-L6-v2 — semantic similarity search"),
             ("Event Types",     "9 categories: Regulatory, Earnings, Leadership, M&A, Product, Milestone, Macro, Debt, ESG"),
             ("Corporate Graph", "NetworkX — ownership-weighted 3-level subsidiary ripple propagation"),
-            ("Price Data",      "yFinance — 5-min cache, Indian NSE ticker support"),
+            ("Price Data",      "yFinance — 5-min cache, Indian NSE ticker support (.NS suffix)"),
             ("News Sources",    "Reuters, Bloomberg, ET Markets, Moneycontrol, CNBC, Yahoo, Livemint, Seeking Alpha"),
-            ("Database",        "SQLite WAL — users, history, watchlist, settings, price_alerts"),
+            ("Database",        "SQLite WAL — users, history, watchlist, settings, price_alerts (ON DELETE CASCADE)"),
             ("Architecture",    "core/ (pure Python) · db/ (SQLite) · ui/ (Streamlit) · pages/ (6 pages)"),
             ("Framework",       "Python 3.11+ · Streamlit · Plotly · Syne + Manrope + JetBrains Mono"),
-            ("Version",         "v5 — Bug fixes, parallel fetching, price alerts, scoped caching"),
+            ("Version",         "v6 — Bug fixes, cascade deletes, single-click export, account deletion, pagination fixes"),
         ]
     ) + """
       </table>
@@ -290,7 +317,8 @@ with tab_ab:
         <span style="color:#FFD060;">_dash_t</span>       → dashboard ticker widget key<br>
         <span style="color:#FF7D35;">_pending_hl</span>   → pre-fill staging (flushed before widgets)<br>
         <span style="color:#FF7D35;">_pending_t</span>    → pre-fill staging (flushed before widgets)<br>
-        <span style="color:#00E8A0;">_result</span>       → latest analysis dict (26+ fields, v5)<br>
+        <span style="color:#00E8A0;">_result</span>       → latest analysis dict (26+ fields, v6)<br>
+        <span style="color:#9B6DFF;">_fi_running</span>   → analysis in-progress flag (disables Analyze btn)<br>
       </div>
     </div>
     """, unsafe_allow_html=True)

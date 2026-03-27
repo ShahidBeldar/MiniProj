@@ -1,11 +1,13 @@
 """
 pages/1_Dashboard.py — Headline Analyzer (7-stage ML pipeline).
-FIX: len(similar) now uses result["similar_count"] — safe for empty DataFrame.
-FIX: JSON export added to Full Report tab.
-FIX: render_sidebar() called for consistent navigation.
-Widget keys:  _dash_hl, _dash_t
-Pending pre-fill: _pending_hl, _pending_t (flushed BEFORE widget render)
-Results: _result (dict)
+FIX: save_analysis() return value checked — success shown only on DB success.
+FIX: Analyze button disabled while analysis is running.
+FIX: in_watchlist() guarded — skips DB call when uid is 0.
+FIX: watch_btn disabled (not just re-labelled) when ticker already in watchlist.
+FIX: clear_btn pops pending keys (not already-rendered widget keys).
+FIX: result["ripple_tree"] accessed safely with .get().
+FIX: _TKR_NAME and _EXAMPLES imported from core.constants (no duplication).
+FIX: Market Chart inner ticker syncs with outer ticker on analysis.
 """
 import sys
 import os
@@ -28,6 +30,7 @@ from ui.components import (
 )
 from core.engine import run_analysis
 from core.graph import get_tickers, impact_color
+from core.constants import TICKER_NAMES as _TKR_NAME, EXAMPLE_HEADLINES as _EXAMPLES
 from db.ops import save_analysis, add_watch, in_watchlist
 from core.stocks import (
     get_price, get_ohlcv_with_indicators, get_index_prices,
@@ -42,44 +45,20 @@ render_sidebar("dashboard")
 _uid   = uid()
 TICKERS = get_tickers()
 
-_TKR_NAME = {
-    "TSLA": "Tesla, Inc.", "AAPL": "Apple Inc.", "GOOGL": "Alphabet Inc.",
-    "MSFT": "Microsoft Corp.", "NVDA": "NVIDIA Corp.", "AMZN": "Amazon.com Inc.",
-    "RELIANCE": "Reliance Industries", "TCS": "Tata Consultancy Services",
-    "INFY": "Infosys Ltd.", "WIPRO": "Wipro Ltd.", "HDFCBANK": "HDFC Bank Ltd.",
-}
-
-_EXAMPLES = [
-    ("Tesla faces record $4.2B EU fine over autopilot safety violations",              "TSLA"),
-    ("Apple reports record Q4 revenue, beats estimates by $4.5B",                     "AAPL"),
-    ("Reliance Jio crosses 500M subscribers, stock rallies 4%",                       "RELIANCE"),
-    ("NVIDIA CEO Jensen Huang resigns citing personal health reasons",                 "NVDA"),
-    ("TCS Q2 revenue guidance disappoints, management warns of budget freeze",         "TCS"),
-    ("Amazon acquires Anthropic for $15B in landmark AI deal",                        "AMZN"),
-    ("Infosys wins $1.8B deal with European bank for core modernisation",             "INFY"),
-    ("HDFC Bank barred from issuing new credit cards due to IT governance failures",  "HDFCBANK"),
-    ("Microsoft Azure revenue grows 29% — AI workloads accelerate cloud growth",      "MSFT"),
-    ("Google faces $5B EU fine over Android antitrust practices",                     "GOOGL"),
-    ("WIPRO announces $500M buyback amid strong free cash flow generation",           "WIPRO"),
-    ("Infosys cuts annual revenue guidance for second consecutive quarter",            "INFY"),
-]
-
 # ── FLUSH PENDING PRE-FILL ────────────────────────────────────────────────────
-# CRITICAL: must happen BEFORE any widget with keys _dash_hl / _dash_t is created.
-
 if "_pending_hl" in st.session_state:
     st.session_state["_dash_hl"] = st.session_state.pop("_pending_hl")
 if "_pending_t" in st.session_state:
     st.session_state["_dash_t"] = st.session_state.pop("_pending_t")
 
 # ── HEADER ────────────────────────────────────────────────────────────────────
-
 st.markdown(page_header(
     'Headline <span style="color:#00C8F0;">Analyzer</span>',
     "7-Stage ML Pipeline · FinBERT · Event Classification · Corporate Ripple Effect",
 ), unsafe_allow_html=True)
 
 # ── INPUT CARD ────────────────────────────────────────────────────────────────
+is_running = st.session_state.get("_fi_running", False)
 
 with st.container():
     st.markdown('<div class="fi-card fi-card-accent">', unsafe_allow_html=True)
@@ -98,20 +77,28 @@ with st.container():
 
     ca, cb, cc, cd = st.columns([2, 1, 1, 1])
     with ca:
-        analyze_btn = st.button("Analyze Impact", type="primary",
-                                use_container_width=True, key="_btn_analyze")
+        # FIX: button disabled while analysis is running to prevent double-submit
+        analyze_btn = st.button(
+            "Analyzing…" if is_running else "Analyze Impact",
+            type="primary",
+            use_container_width=True,
+            key="_btn_analyze",
+            disabled=is_running,
+        )
     with cb:
-        clear_btn  = st.button("Clear", type="secondary",
-                                use_container_width=True, key="_btn_clear")
+        clear_btn  = st.button("Clear", type="secondary", use_container_width=True, key="_btn_clear")
     with cc:
-        random_btn = st.button("Random Example", type="secondary",
-                                use_container_width=True, key="_btn_random")
+        random_btn = st.button("Random Example", type="secondary", use_container_width=True, key="_btn_random")
     with cd:
-        watch_lbl = "In Watchlist" if in_watchlist(_uid, ticker) else "Add to Watchlist"
-        watch_btn = st.button(watch_lbl, type="secondary",
-                               use_container_width=True, key="_btn_watch")
+        # FIX: in_watchlist guarded for uid=0; button disabled when already in watchlist
+        already_watching = in_watchlist(_uid, ticker) if _uid else False
+        watch_lbl = "✓ In Watchlist" if already_watching else "Add to Watchlist"
+        watch_btn = st.button(
+            watch_lbl, type="secondary",
+            use_container_width=True, key="_btn_watch",
+            disabled=already_watching,
+        )
 
-    # Quick examples
     st.markdown('<div class="fi-section" style="margin-top:.9rem;">Quick Examples</div>',
                 unsafe_allow_html=True)
     ex_cols = st.columns(4)
@@ -126,9 +113,9 @@ with st.container():
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ── CONTROL HANDLERS ──────────────────────────────────────────────────────────
-
 if clear_btn:
-    for k in ("_dash_hl", "_dash_t", "_result"):
+    # FIX: only pop pending and result keys, not rendered widget keys
+    for k in ("_pending_hl", "_pending_t", "_result", "_fi_running"):
         st.session_state.pop(k, None)
     st.rerun()
 
@@ -138,9 +125,9 @@ if random_btn:
     st.session_state["_pending_t"]  = ex[1]
     st.rerun()
 
-if watch_btn and ticker:
-    if not in_watchlist(_uid, ticker):
-        add_watch(_uid, ticker, _TKR_NAME.get(ticker, ticker))
+if watch_btn and ticker and _uid:
+    added = add_watch(_uid, _TKR_NAME.get(ticker, ticker), ticker)
+    if added:
         st.success(f"{ticker} added to watchlist.")
     else:
         st.info(f"{ticker} is already in your watchlist.")
@@ -148,16 +135,21 @@ if watch_btn and ticker:
 if analyze_btn:
     hl = (st.session_state.get("_dash_hl") or "").strip()
     if hl:
+        st.session_state["_fi_running"] = True
         with st.spinner("Running 7-stage ML analysis pipeline…"):
             result = run_analysis(hl, ticker)
+        st.session_state["_fi_running"] = False
+        # FIX: save_analysis result checked — show success only when saved
+        saved = save_analysis(_uid, ticker, hl, result)
+        if saved:
+            st.success("Analysis complete.")
+        else:
+            st.warning("Analysis complete, but result could not be saved to history.")
         st.session_state["_result"] = result
-        save_analysis(_uid, ticker, hl, result)
-        st.success("Analysis complete.")
     else:
         st.warning("Please enter a headline first.")
 
 # ── EMPTY STATE ───────────────────────────────────────────────────────────────
-
 result = st.session_state.get("_result")
 if result is None:
     st.markdown("""
@@ -174,7 +166,6 @@ if result is None:
     st.stop()
 
 # ── UNPACK RESULT ─────────────────────────────────────────────────────────────
-
 pol      = result["polarity"]
 raw_pol  = result.get("raw_polarity", 0.0)
 cat      = result["category"]
@@ -187,11 +178,11 @@ evt      = result["event_type"]
 is_rum   = result["is_rumour"]
 macro_f  = result.get("macro_factor", 1.0)
 macro_d  = result.get("macro_description", "")
-sim_count = result.get("similar_count", 0)  # safe — no len(DataFrame)
+sim_count = result.get("similar_count", 0)
+# FIX: ripple_tree accessed safely
+ripple_tree = result.get("ripple_tree", [])
 sc       = sentiment_color(cat)
 sk       = sentiment_badge_kind(cat)
-
-# ── STAT ROW ──────────────────────────────────────────────────────────────────
 
 _CM = {
     "STRONG_NEGATIVE": "#FF3D60", "NEGATIVE": "#FF7D35",
@@ -205,17 +196,14 @@ st.markdown(stat_row(
     stat_box("Relevance",          f"{rel:.0%}",   "Direct ticker news",              "#FFD060"),
     stat_box("Credibility",        f"{cred:.0%}",  "Rumour detected" if is_rum else "Confirmed source",
              "#FF7D35" if is_rum else "#00E8A0"),
-    stat_box("Ripple Entities",    str(len(result["ripple_tree"])), "In corporate graph", "#9B6DFF"),
-    stat_box("Event Type",         evt[:16], f"×{result.get('event_multiplier', 1):.2f}", "#FFD060"),
+    stat_box("Ripple Entities",    str(len(ripple_tree)), "In corporate graph", "#9B6DFF"),
+    stat_box("Event Type",         evt[:16], f"x{result.get('event_multiplier', 1):.2f}", "#FFD060"),
 ), unsafe_allow_html=True)
 
 # ── RESULT TABS ───────────────────────────────────────────────────────────────
-
 t1, t2, t3, t4, t5, t6 = st.tabs([
     "Sentiment", "Ripple Effect", "Historical", "Explainability", "Full Report", "Market Chart"
 ])
-
-# ── TAB 1 — SENTIMENT ────────────────────────────────────────────────────────
 
 with t1:
     left, right = st.columns([3, 2])
@@ -270,10 +258,8 @@ with t1:
         if not pd_data.get("error"):
             st.markdown(live_price_card(ticker, pd_data), unsafe_allow_html=True)
 
-# ── TAB 2 — RIPPLE EFFECT ────────────────────────────────────────────────────
-
 with t2:
-    ripple = result.get("ripple_tree", [])
+    ripple = ripple_tree
     if not ripple:
         st.info("No corporate hierarchy data available for this ticker.")
     else:
@@ -287,7 +273,7 @@ with t2:
           {badge(f"{n_pos} positive", "green") if n_pos else ""}
           {badge(f"{n_neg} negative", "red")   if n_neg else ""}
           <span style="font-size:.68rem;color:#3D5268;font-family:'Manrope',sans-serif;margin-left:4px;">
-            impact = ownership% × relationship_decay × depth_decay
+            impact = ownership% x relationship_decay x depth_decay
           </span>
         </div>
         """, unsafe_allow_html=True)
@@ -299,7 +285,6 @@ with t2:
         names  = [n["name"][:30] for n in ripple]
         imps   = [n["impact"] for n in ripple]
         colors = [impact_color(i) for i in imps]
-
         fig = go.Figure(go.Bar(
             x=imps, y=names, orientation="h",
             marker_color=colors,
@@ -317,12 +302,9 @@ with t2:
         )
         st.plotly_chart(fig, use_container_width=True)
 
-# ── TAB 3 — HISTORICAL ───────────────────────────────────────────────────────
-
 with t3:
     similar = result.get("similar_headlines", pd.DataFrame())
     hp      = result.get("hist_prediction", {})
-
     if similar is None or (hasattr(similar, "empty") and similar.empty):
         st.info("No similar historical headlines found in the dataset.")
     else:
@@ -333,7 +315,6 @@ with t3:
           {badge(f"{sim_count} matches", "neutral")}
         </div>
         """, unsafe_allow_html=True)
-
         for _, row in similar.iterrows():
             t3_val = row.get("t3_move_pct")
             sim_s  = row.get("similarity", 0)
@@ -347,7 +328,6 @@ with t3:
                 ),
                 unsafe_allow_html=True,
             )
-
     if hp:
         avg  = hp.get("avg_move", 0)
         rlo  = hp.get("range_low",  avg)
@@ -367,53 +347,21 @@ with t3:
         </div>
         """, unsafe_allow_html=True)
 
-        if similar is not None and not similar.empty:
-            if "t3_move_pct" in similar.columns and "similarity" in similar.columns:
-                fig2 = go.Figure()
-                for _, row in similar.iterrows():
-                    t3v = float(row.get("t3_move_pct") or 0)
-                    s   = float(row.get("similarity") or 50)
-                    fc  = "#00E8A0" if t3v >= 0 else "#FF3D60"
-                    fig2.add_trace(go.Scatter(
-                        x=[s], y=[t3v], mode="markers+text",
-                        marker=dict(size=14, color=fc, opacity=0.85,
-                                    line=dict(width=1, color="rgba(0,0,0,.3)")),
-                        text=[row.get("Ticker", "")],
-                        textposition="top center",
-                        showlegend=False,
-                    ))
-                fig2.add_hline(y=0, line_color="#22334A", line_dash="dot")
-                fig2.update_layout(
-                    paper_bgcolor="#07090D", plot_bgcolor="#0F1520",
-                    font=dict(color="#7A92A8", size=10, family="Manrope"),
-                    xaxis=dict(title="Similarity %", gridcolor="#1A2535"),
-                    yaxis=dict(title="Actual T+3 Move %", gridcolor="#1A2535",
-                               zerolinecolor="#22334A"),
-                    margin=dict(l=10, r=10, t=10, b=30),
-                    height=300,
-                )
-                st.plotly_chart(fig2, use_container_width=True)
-
-# ── TAB 4 — EXPLAINABILITY ───────────────────────────────────────────────────
-
 with t4:
     attrs = result.get("word_attributions", [])
     st.markdown("""
     <div style="font-size:.8rem;color:#7A92A8;margin-bottom:1rem;line-height:1.72;
                 font-family:'Manrope',sans-serif;">
       <strong style="color:#DDE6F0;">SHAP-style Word Attribution</strong> — Each word's
-      contribution to the final sentiment score, based on a weighted financial lexicon.
-      Green = bullish signal, Red = bearish signal.
+      contribution to the final sentiment score. Green = bullish signal, Red = bearish signal.
     </div>
     """, unsafe_allow_html=True)
-
     if not attrs:
         st.info("No significant word attributions found.")
     else:
         max_c = max(abs(a["contribution"]) for a in attrs) or 1.0
         for a in attrs:
-            st.markdown(attribution_bar(a["word"], a["contribution"], max_c),
-                        unsafe_allow_html=True)
+            st.markdown(attribution_bar(a["word"], a["contribution"], max_c), unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(f"""
@@ -436,12 +384,12 @@ with t4:
     st.markdown('<div class="fi-section">Pipeline Trace</div>', unsafe_allow_html=True)
     stages_html = [
         ("Stage 1 · NER",        ", ".join(result.get("detected_entities", [])) or "No entities"),
-        ("Stage 2 · Event",      f"{evt} (×{result.get('event_multiplier', 1):.2f})"),
+        ("Stage 2 · Event",      f"{evt} (x{result.get('event_multiplier', 1):.2f})"),
         ("Stage 3 · FinBERT",    f"{raw_pol:+.3f} raw → {conf:.0%} conf [{conf_src}]"),
         ("Stage 4 · Rumour",     f"{'Detected' if is_rum else 'Clean'} — credibility {cred:.0%}"),
         ("Stage 5 · SHAP",       f"{len(attrs)} attributed words"),
         ("Stage 6 · Historical", f"{sim_count} matches"),
-        ("Stage 7 · Macro",      f"×{macro_f:.2f} amplification"),
+        ("Stage 7 · Macro",      f"x{macro_f:.2f} amplification"),
     ]
     rows_html = "".join(
         f'<tr style="border-bottom:1px solid #1A2535;">'
@@ -457,11 +405,8 @@ with t4:
         unsafe_allow_html=True,
     )
 
-# ── TAB 5 — FULL REPORT ──────────────────────────────────────────────────────
-
 with t5:
     ts = result.get("analyzed_at", "")[:19].replace("T", " ")
-
     rows_html = "".join(
         f'<tr style="border-bottom:1px solid #1A2535;">'
         f'<td style="padding:7px 0;color:#3D5268;font-family:\'JetBrains Mono\',monospace;'
@@ -478,9 +423,9 @@ with t5:
             ("Relevance",       f"{rel:.1%}",                                         "#DDE6F0"),
             ("Credibility",     f"{cred:.1%}",                                        "#DDE6F0"),
             ("Event Type",      evt,                                                  "#DDE6F0"),
-            ("Event Multiplier",f"×{result.get('event_multiplier', 1):.2f}",          "#DDE6F0"),
+            ("Event Multiplier",f"x{result.get('event_multiplier', 1):.2f}",          "#DDE6F0"),
             ("Rumour",          "Yes" if is_rum else "No",                            "#FF7D35" if is_rum else "#00E8A0"),
-            ("Macro Factor",    f"×{macro_f:.2f} — {macro_d}",                        "#FFD060"),
+            ("Macro Factor",    f"x{macro_f:.2f} — {macro_d}",                        "#FFD060"),
             ("Entities",        ", ".join(result.get("detected_entities", [])) or "None", "#DDE6F0"),
             ("Jargon",          ", ".join(result.get("jargon_detected", [])) or "None",    "#9B6DFF"),
             ("Pipeline",        result.get("pipeline_version", "v5"),                 "#00C8F0"),
@@ -497,7 +442,6 @@ with t5:
     </div>
     """, unsafe_allow_html=True)
 
-    # JSON export
     def _export_result(r: dict) -> dict:
         out = {}
         for k, v in r.items():
@@ -518,22 +462,17 @@ with t5:
         key="_dash_export_json",
     )
 
-# ── TAB 6 — MARKET CHART ─────────────────────────────────────────────────────
-
 with t6:
     @st.cache_data(ttl=300)
     def _mkt_ohlcv(t, p):
         return get_ohlcv_with_indicators(t, p)
 
-    @st.cache_data(ttl=300)
-    def _mkt_indices():
-        return get_index_prices()
-
     mc1, mc2, mc3, mc4 = st.columns([2, 2, 2, 2])
     with mc1:
-        mkt_ticker = st.selectbox("Ticker", TICKERS,
-                                   index=TICKERS.index(ticker) if ticker in TICKERS else 0,
-                                   key="_mkt_t")
+        # FIX: default to the currently analyzed ticker
+        _mkt_default = ticker if ticker in TICKERS else TICKERS[0]
+        _mkt_idx = TICKERS.index(_mkt_default)
+        mkt_ticker = st.selectbox("Ticker", TICKERS, index=_mkt_idx, key="_mkt_t")
     with mc2:
         mkt_period = st.selectbox("Period", list(PERIOD_OPTIONS.keys()), index=2, key="_mkt_p")
     with mc3:
@@ -553,8 +492,6 @@ with t6:
         with pm2: st.metric("Day Change",  fmt_change(pd2))
         with pm3: st.metric("Period High", f"{df_mkt['High'].max():,.2f}" if "High" in df_mkt.columns else "—")
         with pm4: st.metric("Period Low",  f"{df_mkt['Low'].min():,.2f}"  if "Low"  in df_mkt.columns else "—")
-
-        st.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)
 
         row_h  = [0.68, 0.32] if mkt_vol else [1.0]
         n_rows = 2 if mkt_vol else 1
