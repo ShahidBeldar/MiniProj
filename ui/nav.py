@@ -5,6 +5,7 @@ Active page highlighted with type="primary" (cyan tint).
 """
 from __future__ import annotations
 import streamlit as st
+import streamlit.components.v1 as _components
 from ui.auth import is_logged_in, uname, do_logout
 from ui.theme import icon
 
@@ -22,6 +23,32 @@ _PAGES = [
 def render_sidebar(current: str = "home") -> None:
     if not is_logged_in():
         return
+
+    # Open sidebar programmatically on first render — works on mobile where
+    # Streamlit collapses it by default. components.v1.html() executes JS in
+    # a sandboxed iframe that can reach the parent Streamlit document.
+    if not st.session_state.get("_fi_sidebar_opened"):
+        _components.html(
+            """<script>
+            (function() {
+              function open() {
+                try {
+                  var b = window.parent.document.querySelector(
+                    '[data-testid="collapsedControl"] button');
+                  if (b) { b.click(); return true; }
+                } catch(e) {}
+                return false;
+              }
+              if (!open()) {
+                var n=0, iv=setInterval(function(){
+                  if(open()||n++>40) clearInterval(iv);
+                },150);
+              }
+            })();
+            </script>""",
+            height=0, scrolling=False,
+        )
+        st.session_state["_fi_sidebar_opened"] = True
 
     _un   = uname()
     _init = _un[0].upper() if _un else "?"

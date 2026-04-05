@@ -307,30 +307,35 @@ label,.stTextInput label,.stTextArea label,.stSelectbox label,.stToggle label { 
 """
 
 
-_JS = """
-<script>
-(function() {
-  // Auto-expand sidebar on first page load (Streamlit collapses it on mobile by default)
-  function openSidebar() {
-    var btn = document.querySelector('[data-testid="collapsedControl"] button');
-    if (btn) { btn.click(); return true; }
-    return false;
-  }
-  // Try immediately, then retry until sidebar toggle appears in DOM
-  if (!openSidebar()) {
-    var attempts = 0;
-    var iv = setInterval(function() {
-      if (openSidebar() || attempts++ > 20) clearInterval(iv);
-    }, 150);
-  }
-})();
-</script>
-"""
-
-
 def inject_css() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
-    # Inject JS only once per session to avoid repeated sidebar toggles
+    # Auto-open sidebar once per session using components.v1.html
+    # (st.markdown strips <script> tags — components.v1.html is the correct API)
     if not st.session_state.get("_fi_js_injected"):
-        st.markdown(_JS, unsafe_allow_html=True)
+        import streamlit.components.v1 as components
+        components.html(
+            """
+            <script>
+            (function() {
+              function tryOpen() {
+                // Walk up into the parent Streamlit frame and click the toggle
+                try {
+                  var doc = window.parent.document;
+                  var btn = doc.querySelector('[data-testid="collapsedControl"] button');
+                  if (btn) { btn.click(); return true; }
+                } catch(e) {}
+                return false;
+              }
+              if (!tryOpen()) {
+                var n = 0;
+                var iv = setInterval(function() {
+                  if (tryOpen() || n++ > 30) clearInterval(iv);
+                }, 200);
+              }
+            })();
+            </script>
+            """,
+            height=0,
+            scrolling=False,
+        )
         st.session_state["_fi_js_injected"] = True
