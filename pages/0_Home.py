@@ -1,5 +1,7 @@
 """
 pages/0_Home.py — Home / landing page.
+FIX: Replaced all <a href> navigation with st.button + st.switch_page so session
+     state (_fi_loggedin) is preserved across page transitions on Streamlit Cloud.
 """
 import sys
 import os
@@ -16,7 +18,7 @@ inject_css()
 require_login()
 render_sidebar("home")
 
-_uid   = get_uid()
+_uid = get_uid()
 
 @st.cache_data(ttl=120)
 def _stats(u: int) -> dict:
@@ -38,24 +40,24 @@ _cards = [
         "Headline Analyzer",
         "7-stage ML pipeline — FinBERT sentiment, event classification, SHAP attribution, "
         "rumour detection, historical similarity, and corporate ripple effect propagation.",
-        "/Analyzer", "Open Dashboard →", "#00C8F0",
+        "pages/1_Dashboard.py", "Open Dashboard →", "#00C8F0",
     ),
     (
         "Portfolio Watchlist",
         "Track your tickers with live prices, latest sentiment signals, day change bars, "
         "90-day normalised chart, and one-click analysis routing to the Dashboard.",
-        "/Watchlist", "Open Watchlist →", "#00E8A0",
+        "pages/3_Watchlist.py", "Open Watchlist →", "#00E8A0",
     ),
     (
         "Live News Feed",
         "RSS headlines from Reuters, Bloomberg, ET Markets, Moneycontrol, CNBC and more — "
         "auto-scored, ticker-tagged, rumour-flagged, and click-to-analyze.",
-        "/News_Feed", "Open News Feed →", "#FFD060",
+        "pages/2_News.py", "Open News Feed →", "#FFD060",
     ),
 ]
 
 card_cols = st.columns(3)
-for col, (title, body, href, lbl, accent) in zip(card_cols, _cards):
+for col, (title, body, page_path, lbl, accent) in zip(card_cols, _cards):
     with col:
         st.markdown(f"""
         <div class="fi-card" style="border-top:2px solid {accent};min-height:120px;">
@@ -69,13 +71,9 @@ for col, (title, body, href, lbl, accent) in zip(card_cols, _cards):
                       color:#7A92A8;line-height:1.72;margin-bottom:.8rem;">{body}</div>
         </div>
         """, unsafe_allow_html=True)
-        st.markdown(
-            f'<a href="{href}" target="_self" style="display:block;text-align:center;'
-            f'padding:8px 16px;border-radius:8px;border:1px solid #1A2535;'
-            f'font-family:Manrope,sans-serif;font-size:.82rem;font-weight:500;'
-            f'color:#7A92A8;text-decoration:none;margin-top:4px;">{lbl}</a>',
-            unsafe_allow_html=True,
-        )
+        # FIX: st.button + st.switch_page preserves session state (no full browser nav)
+        if st.button(lbl, key=f"_home_card_{page_path}", use_container_width=True, type="secondary"):
+            st.switch_page(page_path)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -88,11 +86,11 @@ neg     = _stats_data.get("negative", 0)
 conf    = _stats_data.get("avg_conf") or 0
 
 m1, m2, m3, m4, m5 = st.columns(5)
-with m1: st.metric("Analyses Run",     total)
-with m2: st.metric("Tickers Covered",  tickers)
-with m3: st.metric("Bullish Signals",  pos)
-with m4: st.metric("Bearish Signals",  neg)
-with m5: st.metric("Avg Confidence",   f"{conf:.0%}" if conf else "—")
+with m1: st.metric("Analyses Run",    total)
+with m2: st.metric("Tickers Covered", tickers)
+with m3: st.metric("Bullish Signals", pos)
+with m4: st.metric("Bearish Signals", neg)
+with m5: st.metric("Avg Confidence",  f"{conf:.0%}" if conf else "—")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -101,22 +99,18 @@ st.markdown("<br>", unsafe_allow_html=True)
 st.markdown('<div class="fi-section">Quick Access</div>', unsafe_allow_html=True)
 q1, q2, q3, q4, q5, q6 = st.columns(6)
 _quick = [
-    (q1, "/Analyzer",  "Analyze Headline"),
-    (q2, "/News_Feed", "News Feed"),
-    (q3, "/Watchlist", "My Watchlist"),
-    (q4, "/History",   "History"),
-    (q5, "/Market",    "Market"),
-    (q6, "/Settings",  "Settings"),
+    (q1, "pages/1_Dashboard.py", "Analyze Headline"),
+    (q2, "pages/2_News.py",      "News Feed"),
+    (q3, "pages/3_Watchlist.py", "My Watchlist"),
+    (q4, "pages/4_History.py",   "History"),
+    (q5, "pages/6_Market.py",    "Market"),
+    (q6, "pages/5_Settings.py",  "Settings"),
 ]
-for col, href, lbl in _quick:
+for col, page_path, lbl in _quick:
     with col:
-        st.markdown(
-            f'<a href="{href}" target="_self" style="display:block;text-align:center;'
-            f'padding:8px;border-radius:8px;border:1px solid #1A2535;'
-            f'font-family:Manrope,sans-serif;font-size:.82rem;font-weight:500;'
-            f'color:#7A92A8;text-decoration:none;transition:all .15s;">{lbl}</a>',
-            unsafe_allow_html=True,
-        )
+        # FIX: st.button preserves session state; <a href> caused logout on Streamlit Cloud
+        if st.button(lbl, key=f"_home_quick_{page_path}", use_container_width=True, type="secondary"):
+            st.switch_page(page_path)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
