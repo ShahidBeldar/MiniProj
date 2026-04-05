@@ -139,45 +139,30 @@ html,body,[class*="css"] {
 .fi-nav-label { flex:1; }
 .fi-sidebar-divider { height:1px; background:var(--b1); margin:.8rem .4rem .5rem; }
 
-/* ■■ SIDEBAR TOGGLE ■■ */
+/* ■■ SIDEBAR — ALWAYS VISIBLE (no JS needed) ■■ */
 
-/* Collapsed control — the strip shown when sidebar is hidden */
-[data-testid="collapsedControl"] {
-  display:flex!important; visibility:visible!important; z-index:999!important;
-  align-items:center!important; justify-content:center!important;
-  background:#0B0F16!important;
-  border-right:2px solid #00C8F0!important;
-  width:2.4rem!important; min-width:2.4rem!important;
-  position:fixed!important; top:0!important; left:0!important;
-  height:100vh!important;
+/* Force sidebar open by overriding Streamlit's collapse transform.
+   When collapsed, Streamlit sets translateX(-110%). We override it to 0. */
+[data-testid="stSidebar"] {
+  transform: translateX(0) !important;
+  min-width: 240px !important;
+  width: 240px !important;
+  visibility: visible !important;
+  display: flex !important;
 }
-[data-testid="collapsedControl"] button {
-  width:2.4rem!important; height:2.4rem!important;
-  background:#00C8F0!important;
-  border:none!important; border-radius:0 6px 6px 0!important;
-  box-shadow:2px 0 12px rgba(0,200,240,.35)!important;
-  display:flex!important; align-items:center!important; justify-content:center!important;
-  padding:0!important; cursor:pointer!important;
-  font-size:0!important;
-}
-[data-testid="collapsedControl"] button svg {
-  display:block!important; width:1.3rem!important; height:1.3rem!important;
-  color:#000!important; fill:#000!important;
-}
-[data-testid="collapsedControl"] button::after {
-  content:"☰";
-  font-size:1.2rem!important; font-weight:700!important;
-  color:#000!important; line-height:1!important;
+[data-testid="stSidebar"][aria-expanded="false"] {
+  transform: translateX(0) !important;
+  min-width: 240px !important;
+  width: 240px !important;
 }
 
-/* Collapse button inside open sidebar */
-[data-testid="stSidebarCollapseButton"] button {
-  font-size:0!important;
-  background:transparent!important; border:none!important;
-}
-[data-testid="stSidebarCollapseButton"] button svg { display:block!important; }
-[data-testid="stSidebarCollapseButton"] button::after {
-  content:"✕"; font-size:1rem!important; color:var(--t2)!important; display:block;
+/* Hide the collapse/expand toggle buttons — sidebar is always open */
+[data-testid="collapsedControl"] { display:none!important; }
+[data-testid="stSidebarCollapseButton"] { display:none!important; }
+
+/* Adjust main content so it doesn't go under the always-open sidebar */
+.main .block-container {
+  padding-left: 1.5rem !important;
 }
 
 /* ■■ LAYOUT ■■ */
@@ -309,33 +294,3 @@ label,.stTextInput label,.stTextArea label,.stSelectbox label,.stToggle label { 
 
 def inject_css() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
-    # Auto-open sidebar once per session using components.v1.html
-    # (st.markdown strips <script> tags — components.v1.html is the correct API)
-    if not st.session_state.get("_fi_js_injected"):
-        import streamlit.components.v1 as components
-        components.html(
-            """
-            <script>
-            (function() {
-              function tryOpen() {
-                // Walk up into the parent Streamlit frame and click the toggle
-                try {
-                  var doc = window.parent.document;
-                  var btn = doc.querySelector('[data-testid="collapsedControl"] button');
-                  if (btn) { btn.click(); return true; }
-                } catch(e) {}
-                return false;
-              }
-              if (!tryOpen()) {
-                var n = 0;
-                var iv = setInterval(function() {
-                  if (tryOpen() || n++ > 30) clearInterval(iv);
-                }, 200);
-              }
-            })();
-            </script>
-            """,
-            height=0,
-            scrolling=False,
-        )
-        st.session_state["_fi_js_injected"] = True
