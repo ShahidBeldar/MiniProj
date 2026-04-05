@@ -12,7 +12,7 @@ import streamlit as st
 st.set_page_config(
     page_title="Finance Impact",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",  # JS in render_sidebar() opens it on load
 )
 
 from ui.auth import bootstrap, is_logged_in, render_login_page, do_logout
