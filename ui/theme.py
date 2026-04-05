@@ -139,38 +139,45 @@ html,body,[class*="css"] {
 .fi-nav-label { flex:1; }
 .fi-sidebar-divider { height:1px; background:var(--b1); margin:.8rem .4rem .5rem; }
 
-/* ■■ SIDEBAR TOGGLE — hide label text, show only the arrow icon ■■ */
+/* ■■ SIDEBAR TOGGLE ■■ */
+
+/* Collapsed control — the strip shown when sidebar is hidden */
 [data-testid="collapsedControl"] {
-  display:flex!important; visibility:visible!important;
-  background:var(--bg2)!important; border-right:1px solid var(--b1)!important;
-  width:1.6rem!important; min-width:1.6rem!important;
+  display:flex!important; visibility:visible!important; z-index:999!important;
+  align-items:center!important; justify-content:center!important;
+  background:#0B0F16!important;
+  border-right:2px solid #00C8F0!important;
+  width:2.4rem!important; min-width:2.4rem!important;
+  position:fixed!important; top:0!important; left:0!important;
+  height:100vh!important;
 }
 [data-testid="collapsedControl"] button {
-  color:var(--t2)!important; background:transparent!important;
-  border:none!important; box-shadow:none!important;
-  width:1.6rem!important; padding:0!important;
-  font-size:0!important;          /* hide "keyboard_double_arrow_right" text */
+  width:2.4rem!important; height:2.4rem!important;
+  background:#00C8F0!important;
+  border:none!important; border-radius:0 6px 6px 0!important;
+  box-shadow:2px 0 12px rgba(0,200,240,.35)!important;
+  display:flex!important; align-items:center!important; justify-content:center!important;
+  padding:0!important; cursor:pointer!important;
+  font-size:0!important;
 }
 [data-testid="collapsedControl"] button svg {
-  display:block!important; width:1.1rem!important; height:1.1rem!important;
-  color:var(--t2)!important;
+  display:block!important; width:1.3rem!important; height:1.3rem!important;
+  color:#000!important; fill:#000!important;
 }
 [data-testid="collapsedControl"] button::after {
-  content:"›";                    /* clean chevron fallback if SVG hidden */
-  font-size:1.1rem!important;
-  color:var(--t2)!important;
-  display:block;
+  content:"☰";
+  font-size:1.2rem!important; font-weight:700!important;
+  color:#000!important; line-height:1!important;
 }
-[data-testid="collapsedControl"] button:hover { color:var(--accent)!important; }
-[data-testid="collapsedControl"] button:hover svg { color:var(--accent)!important; }
-[data-testid="collapsedControl"] button:hover::after { color:var(--accent)!important; }
-/* Streamlit sidebar expand button (when sidebar is open) */
+
+/* Collapse button inside open sidebar */
 [data-testid="stSidebarCollapseButton"] button {
   font-size:0!important;
+  background:transparent!important; border:none!important;
 }
 [data-testid="stSidebarCollapseButton"] button svg { display:block!important; }
 [data-testid="stSidebarCollapseButton"] button::after {
-  content:"‹"; font-size:1.1rem!important; color:var(--t2)!important; display:block;
+  content:"✕"; font-size:1rem!important; color:var(--t2)!important; display:block;
 }
 
 /* ■■ LAYOUT ■■ */
@@ -300,5 +307,30 @@ label,.stTextInput label,.stTextArea label,.stSelectbox label,.stToggle label { 
 """
 
 
+_JS = """
+<script>
+(function() {
+  // Auto-expand sidebar on first page load (Streamlit collapses it on mobile by default)
+  function openSidebar() {
+    var btn = document.querySelector('[data-testid="collapsedControl"] button');
+    if (btn) { btn.click(); return true; }
+    return false;
+  }
+  // Try immediately, then retry until sidebar toggle appears in DOM
+  if (!openSidebar()) {
+    var attempts = 0;
+    var iv = setInterval(function() {
+      if (openSidebar() || attempts++ > 20) clearInterval(iv);
+    }, 150);
+  }
+})();
+</script>
+"""
+
+
 def inject_css() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
+    # Inject JS only once per session to avoid repeated sidebar toggles
+    if not st.session_state.get("_fi_js_injected"):
+        st.markdown(_JS, unsafe_allow_html=True)
+        st.session_state["_fi_js_injected"] = True
