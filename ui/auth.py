@@ -13,11 +13,28 @@ from __future__ import annotations
 import os
 import re
 import time
+import secrets
 import bcrypt
 import streamlit as st
 
-from db.schema import init_db, seed_users
+from db.schema import ensure_db
 from db.ops import get_user, create_user, touch_login, set_password
+
+# ── SESSION TOKEN STORE ───────────────────────────────────────────────────────
+# Maps token -> user dict, lives at process level (survives Streamlit reruns).
+# On browser refresh, session_state is wiped but the ?sid= query param survives,
+# allowing automatic re-hydration of the login session.
+
+@st.cache_resource
+def _token_store() -> dict:
+    return {}
+
+@st.cache_resource
+def _token_expiry() -> dict:
+    return {}
+
+_TOKEN_PARAM = "sid"
+_TOKEN_TTL   = 60 * 60 * 8   # 8 hours
 
 _MAX_ATTEMPTS    = int(os.environ.get("FI_MAX_ATTEMPTS",    "5"))
 _LOCKOUT_SECONDS = int(os.environ.get("FI_LOCKOUT_SECONDS", "300"))
@@ -74,8 +91,34 @@ def validate_email(email: str) -> tuple[bool, str]:
     return True, ""
 
 
+def _try_restore_session() -> bool:
+    """Re-hydrate session_state from ?sid= query param on page refresh."""
+    if st.session_state.get("_fi_loggedin"):
+        return True
+    try:
+        token = st.query_params.get(_TOKEN_PARAM, "")
+    except Exception:
+        return False
+    if not token:
+        return False
+    expiry = _token_expiry()
+    store  = _token_store()
+    if token not in store or time.time() > expiry.get(token, 0):
+        # Expired or unknown — clean up
+        store.pop(token, None)
+        expiry.pop(token, None)
+        return False
+    user = store[token]
+    st.session_state["_fi_loggedin"] = True
+    st.session_state["_fi_user"]     = user
+    st.session_state["_fi_token"]    = token
+    return True
+
+
 def is_logged_in() -> bool:
-    return bool(st.session_state.get("_fi_loggedin", False))
+    if st.session_state.get("_fi_loggedin"):
+        return True
+    return _try_restore_session()
 
 
 def current_user() -> dict:
@@ -108,19 +151,37 @@ def do_login(username: str, password: str) -> tuple[bool, str]:
         _record_failure(un)
         return False, "Invalid credentials."
     _clear_failures(un)
-    st.session_state["_fi_loggedin"] = True
-    st.session_state["_fi_user"] = {
+    user_dict = {
         "id":       user["id"],
         "username": user["username"],
         "email":    user.get("email", ""),
         "role":     user.get("role", "user"),
     }
+    token = secrets.token_urlsafe(32)
+    _token_store()[token]  = user_dict
+    _token_expiry()[token] = time.time() + _TOKEN_TTL
+    st.session_state["_fi_loggedin"] = True
+    st.session_state["_fi_user"]     = user_dict
+    st.session_state["_fi_token"]    = token
+    # Embed token in URL so page refresh re-hydrates the session
+    try:
+        st.query_params[_TOKEN_PARAM] = token
+    except Exception:
+        pass
     touch_login(user["id"])
     return True, f"Welcome back, {user['username']}."
 
 
 def do_logout() -> None:
-    """FIX: Only delete _fi_ prefixed keys — preserve Streamlit widget state."""
+    """Revoke session token and clear all _fi_ session keys."""
+    token = st.session_state.get("_fi_token")
+    if token:
+        _token_store().pop(token, None)
+        _token_expiry().pop(token, None)
+    try:
+        st.query_params.clear()
+    except Exception:
+        pass
     for k in [k for k in list(st.session_state.keys()) if k.startswith("_fi_")]:
         del st.session_state[k]
 
@@ -162,9 +223,8 @@ def do_change_password(user_id: int, old: str, new: str, confirm: str) -> tuple[
 
 @st.cache_resource
 def _bootstrap_once() -> bool:
-    """FIX: Run DB init exactly once per server process, not on every rerun."""
-    init_db()
-    seed_users()
+    """Runs once per server process. ensure_db() handles init + seeding atomically."""
+    ensure_db()
     return True
 
 
