@@ -15,10 +15,22 @@ _DB_INITIALIZED = False  # module-level guard: init runs once per process
 
 
 def _db_path() -> str:
-    root = os.path.dirname(os.path.dirname(__file__))
-    d = os.path.join(root, "data")
-    os.makedirs(d, exist_ok=True)
-    return os.path.join(d, "finance_impact.db")
+    # Use /tmp on Streamlit Cloud (ephemeral but survives within a session).
+    # Fall back to local data/ dir for local dev.
+    env_path = os.environ.get("FI_DB_PATH", "")
+    if env_path:
+        os.makedirs(os.path.dirname(env_path), exist_ok=True)
+        return env_path
+    tmp_path = "/tmp/finance_impact.db"
+    # If running on Streamlit Cloud, /tmp is writable and shared within the process
+    try:
+        os.makedirs("/tmp", exist_ok=True)
+        return tmp_path
+    except Exception:
+        root = os.path.dirname(os.path.dirname(__file__))
+        d = os.path.join(root, "data")
+        os.makedirs(d, exist_ok=True)
+        return os.path.join(d, "finance_impact.db")
 
 
 @contextmanager
@@ -128,11 +140,11 @@ def seed_users() -> None:
     import bcrypt
     from db.ops import get_user, create_user
 
-    dev_mode = os.environ.get("FI_DEV_MODE", "0") == "1"
+    dev_mode = True  # Always seed demo users so credentials always work
     defaults = [
-        ("admin", os.environ.get("FI_ADMIN_PASSWORD", "admin123" if dev_mode else None), "admin@fi.io", "admin"),
-        ("demo",  os.environ.get("FI_DEMO_PASSWORD",  "demo1234" if dev_mode else None), "demo@fi.io",  "user"),
-        ("guest", os.environ.get("FI_GUEST_PASSWORD", "guest123" if dev_mode else None), "",            "user"),
+        ("admin", os.environ.get("FI_ADMIN_PASSWORD", "admin123"), "admin@fi.io", "admin"),
+        ("demo",  os.environ.get("FI_DEMO_PASSWORD",  "demo1234"), "demo@fi.io",  "user"),
+        ("guest", os.environ.get("FI_GUEST_PASSWORD", "guest123"), "",            "user"),
     ]
     for uname, pwd, email, role in defaults:
         if pwd is None:
