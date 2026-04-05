@@ -375,8 +375,8 @@ with t3:
                 **_ct(height=220),
                 title=dict(text=f"RSI (14) — {rsi_val:.1f} · {rsi_lbl}",
                            font=dict(size=11, color=rsi_clr, family="Syne")),
-                yaxis=dict(range=[0, 100], gridcolor="#1A2535"),
             )
+            fig_rsi.update_yaxes(range=[0, 100], gridcolor="#1A2535")
             st.plotly_chart(fig_rsi, use_container_width=True, config={"displayModeBar": False})
 
         if "MACD" in dfi.columns:
