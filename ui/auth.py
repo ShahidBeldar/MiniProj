@@ -212,8 +212,7 @@ def render_login_page() -> None:
                     else:
                         st.error(msg)
 
-            if os.environ.get("FI_DEV_MODE", "0") == "1":
-                st.markdown("""
+            st.markdown("""
                 <div style="text-align:center;margin-top:.8rem;font-size:.68rem;
                             color:#3D5268;font-family:'Manrope',sans-serif;">
                   Demo &nbsp;&middot;&nbsp;

@@ -139,9 +139,39 @@ html,body,[class*="css"] {
 .fi-nav-label { flex:1; }
 .fi-sidebar-divider { height:1px; background:var(--b1); margin:.8rem .4rem .5rem; }
 
-[data-testid="collapsedControl"] { display:flex!important; visibility:visible!important; background:var(--bg2)!important; border-right:1px solid var(--b1)!important; }
-[data-testid="collapsedControl"] button { color:var(--t2)!important; background:transparent!important; border:none!important; box-shadow:none!important; }
-[data-testid="collapsedControl"] button:hover { color:var(--accent)!important; transform:none!important; }
+/* ■■ SIDEBAR TOGGLE — hide label text, show only the arrow icon ■■ */
+[data-testid="collapsedControl"] {
+  display:flex!important; visibility:visible!important;
+  background:var(--bg2)!important; border-right:1px solid var(--b1)!important;
+  width:1.6rem!important; min-width:1.6rem!important;
+}
+[data-testid="collapsedControl"] button {
+  color:var(--t2)!important; background:transparent!important;
+  border:none!important; box-shadow:none!important;
+  width:1.6rem!important; padding:0!important;
+  font-size:0!important;          /* hide "keyboard_double_arrow_right" text */
+}
+[data-testid="collapsedControl"] button svg {
+  display:block!important; width:1.1rem!important; height:1.1rem!important;
+  color:var(--t2)!important;
+}
+[data-testid="collapsedControl"] button::after {
+  content:"›";                    /* clean chevron fallback if SVG hidden */
+  font-size:1.1rem!important;
+  color:var(--t2)!important;
+  display:block;
+}
+[data-testid="collapsedControl"] button:hover { color:var(--accent)!important; }
+[data-testid="collapsedControl"] button:hover svg { color:var(--accent)!important; }
+[data-testid="collapsedControl"] button:hover::after { color:var(--accent)!important; }
+/* Streamlit sidebar expand button (when sidebar is open) */
+[data-testid="stSidebarCollapseButton"] button {
+  font-size:0!important;
+}
+[data-testid="stSidebarCollapseButton"] button svg { display:block!important; }
+[data-testid="stSidebarCollapseButton"] button::after {
+  content:"‹"; font-size:1.1rem!important; color:var(--t2)!important; display:block;
+}
 
 /* ■■ LAYOUT ■■ */
 .block-container { padding:1.5rem 2.2rem!important; max-width:1520px!important; }
@@ -187,6 +217,8 @@ label,.stTextInput label,.stTextArea label,.stSelectbox label,.stToggle label { 
 .stAlert { border-radius:10px!important; font-family:var(--f-body)!important; font-size:.8rem!important; }
 [data-testid="stExpander"] { background:var(--panel)!important; border:1px solid var(--b1)!important; border-radius:var(--radius)!important; }
 [data-testid="stExpander"] summary { font-family:var(--f-body)!important; font-size:.84rem!important; font-weight:500!important; }
+[data-testid="stExpander"] summary span[data-testid="stExpanderToggleIcon"] { font-size:0!important; }
+[data-testid="stExpander"] summary span[data-testid="stExpanderToggleIcon"] svg { display:block!important; width:1rem!important; height:1rem!important; }
 [data-testid="stForm"] { background:var(--bg3)!important; border:1px solid var(--b1)!important; border-radius:var(--radius)!important; }
 [data-testid="stDownloadButton"]>button { background:transparent!important; color:var(--accent)!important; border:1px solid rgba(0,200,240,.25)!important; box-shadow:none!important; }
 [data-testid="stDownloadButton"]>button:hover { background:rgba(0,200,240,.05)!important; transform:none!important; }
