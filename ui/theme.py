@@ -139,34 +139,72 @@ html,body,[class*="css"] {
 .fi-nav-label { flex:1; }
 .fi-sidebar-divider { height:1px; background:var(--b1); margin:.8rem .4rem .5rem; }
 
-/* ■■ SIDEBAR — ALWAYS VISIBLE (no JS needed) ■■ */
+/* ■■ SIDEBAR TOGGLE ■■ */
 
-/* Force sidebar open by overriding Streamlit's collapse transform.
-   When collapsed, Streamlit sets translateX(-110%). We override it to 0. */
-[data-testid="stSidebar"] {
-  transform: translateX(0) !important;
-  min-width: 240px !important;
-  width: 240px !important;
-  visibility: visible !important;
-  display: flex !important;
+/* ── RE-OPEN BUTTON (shown when sidebar is collapsed) ── */
+/* Full-height strip on the left so it's always tapable on mobile */
+[data-testid="collapsedControl"] {
+  display:flex!important; visibility:visible!important; z-index:9999!important;
+  flex-direction:column!important; align-items:center!important;
+  justify-content:flex-start!important; padding-top:1rem!important;
+  position:fixed!important; top:0!important; left:0!important;
+  width:44px!important; min-width:44px!important; height:100vh!important;
+  background:#0B0F16!important; border-right:1px solid #1A2535!important;
 }
-[data-testid="stSidebar"][aria-expanded="false"] {
-  transform: translateX(0) !important;
-  min-width: 240px !important;
-  width: 240px !important;
+/* The actual button — big cyan pill, easy to tap */
+[data-testid="collapsedControl"] button {
+  display:flex!important; align-items:center!important;
+  justify-content:center!important;
+  width:36px!important; height:36px!important;
+  background:#00C8F0!important; color:#000!important;
+  border:none!important; border-radius:50%!important;
+  cursor:pointer!important; padding:0!important;
+  box-shadow:0 0 14px rgba(0,200,240,.5)!important;
+  /* hide the text label, keep only the icon */
+  font-size:0!important; line-height:0!important;
+  overflow:hidden!important;
 }
+/* Show a clean hamburger icon via pseudo-element */
+[data-testid="collapsedControl"] button::after {
+  content:"☰";
+  font-size:18px!important; line-height:1!important;
+  color:#000!important; font-weight:700!important;
+  display:block!important; pointer-events:none!important;
+}
+/* Keep any SVG Streamlit injects hidden so our ::after shows cleanly */
+[data-testid="collapsedControl"] button svg { display:none!important; }
 
-/* Hide the collapse/expand toggle buttons — sidebar is always open */
-[data-testid="collapsedControl"] { display:none!important; }
-[data-testid="stSidebarCollapseButton"] { display:none!important; }
-
-/* Adjust main content so it doesn't go under the always-open sidebar */
-.main .block-container {
-  padding-left: 1.5rem !important;
+/* ── CLOSE BUTTON (shown inside the open sidebar) ── */
+[data-testid="stSidebarCollapseButton"] {
+  position:absolute!important; top:12px!important; right:12px!important;
+  z-index:10!important;
 }
+[data-testid="stSidebarCollapseButton"] button {
+  display:flex!important; align-items:center!important;
+  justify-content:center!important;
+  width:30px!important; height:30px!important;
+  background:transparent!important;
+  border:1px solid #1A2535!important; border-radius:50%!important;
+  cursor:pointer!important; padding:0!important;
+  font-size:0!important; line-height:0!important;
+  overflow:hidden!important;
+  transition:border-color .15s!important;
+}
+[data-testid="stSidebarCollapseButton"] button:hover {
+  border-color:#3D5268!important;
+}
+[data-testid="stSidebarCollapseButton"] button::after {
+  content:"✕";
+  font-size:13px!important; color:#7A92A8!important;
+  display:block!important; pointer-events:none!important;
+}
+[data-testid="stSidebarCollapseButton"] button svg { display:none!important; }
 
 /* ■■ LAYOUT ■■ */
+/* When sidebar is collapsed the 44px collapsedControl strip sits on the left.
+   Add matching left padding so content never hides under it. */
 .block-container { padding:1.5rem 2.2rem!important; max-width:1520px!important; }
+section[data-testid="stSidebarUserContent"] { padding-top:3rem!important; }
 [data-testid="stSidebar"] { background:var(--bg2)!important; border-right:1px solid var(--b1)!important; min-width:220px!important; }
 [data-testid="stSidebar"] > div:first-child { padding-top:0!important; }
 
@@ -209,8 +247,15 @@ label,.stTextInput label,.stTextArea label,.stSelectbox label,.stToggle label { 
 .stAlert { border-radius:10px!important; font-family:var(--f-body)!important; font-size:.8rem!important; }
 [data-testid="stExpander"] { background:var(--panel)!important; border:1px solid var(--b1)!important; border-radius:var(--radius)!important; }
 [data-testid="stExpander"] summary { font-family:var(--f-body)!important; font-size:.84rem!important; font-weight:500!important; }
-[data-testid="stExpander"] summary span[data-testid="stExpanderToggleIcon"] { font-size:0!important; }
-[data-testid="stExpander"] summary span[data-testid="stExpanderToggleIcon"] svg { display:block!important; width:1rem!important; height:1rem!important; }
+/* Hide the text label on expander arrows (Streamlit renders icon name as text) */
+[data-testid="stExpander"] summary span[data-testid="stExpanderToggleIcon"],
+[data-testid="stExpander"] summary [data-testid="stExpanderToggleIcon"],
+[data-testid="stExpander"] summary .st-emotion-cache-1h9usn1,
+[data-testid="stExpander"] details summary p,
+[data-testid="stExpander"] details > summary > span:last-child { font-size:0!important; line-height:0!important; overflow:hidden!important; }
+/* Keep the SVG itself visible and sized properly */
+[data-testid="stExpander"] summary span[data-testid="stExpanderToggleIcon"] svg,
+[data-testid="stExpander"] summary [data-testid="stExpanderToggleIcon"] svg { display:block!important; width:1rem!important; height:1rem!important; }
 [data-testid="stForm"] { background:var(--bg3)!important; border:1px solid var(--b1)!important; border-radius:var(--radius)!important; }
 [data-testid="stDownloadButton"]>button { background:transparent!important; color:var(--accent)!important; border:1px solid rgba(0,200,240,.25)!important; box-shadow:none!important; }
 [data-testid="stDownloadButton"]>button:hover { background:rgba(0,200,240,.05)!important; transform:none!important; }
@@ -292,5 +337,30 @@ label,.stTextInput label,.stTextArea label,.stSelectbox label,.stToggle label { 
 """
 
 
+_JS = """
+<script>
+(function() {
+  // Auto-expand sidebar on first page load (Streamlit collapses it on mobile by default)
+  function openSidebar() {
+    var btn = document.querySelector('[data-testid="collapsedControl"] button');
+    if (btn) { btn.click(); return true; }
+    return false;
+  }
+  // Try immediately, then retry until sidebar toggle appears in DOM
+  if (!openSidebar()) {
+    var attempts = 0;
+    var iv = setInterval(function() {
+      if (openSidebar() || attempts++ > 20) clearInterval(iv);
+    }, 150);
+  }
+})();
+</script>
+"""
+
+
 def inject_css() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
+    # Inject JS only once per session to avoid repeated sidebar toggles
+    if not st.session_state.get("_fi_js_injected"):
+        st.markdown(_JS, unsafe_allow_html=True)
+        st.session_state["_fi_js_injected"] = True
