@@ -1,10 +1,16 @@
 """
 db/ops.py — All CRUD operations.
-FIX: _conn() context manager ensures connections always closed.
-FIX: add_watch() correctly distinguishes inserted vs duplicate (rowcount check).
-FIX: _sanitise_result() now handles numpy scalar types properly.
-FIX: get_stats() returns safe zero-filled dict when avg_conf is None.
-FIX: Retry logic on OperationalError (database is locked).
+
+ROOT CAUSE FIX: Every public function now calls ensure_db() before touching
+the database. This guarantees tables exist regardless of which page loads
+first or what order Streamlit reruns happen on Streamlit Cloud.
+
+Other fixes retained:
+- _conn() context manager ensures connections always closed
+- add_watch() rowcount check for true insert-vs-duplicate detection
+- _sanitise_result() handles numpy scalar types
+- get_stats() returns safe zero-filled dict when avg_conf is None
+- Retry logic on OperationalError (database locked)
 """
 from __future__ import annotations
 import json
@@ -13,17 +19,18 @@ import logging
 from contextlib import contextmanager
 from typing import Optional
 
-from db.schema import get_conn
+from db.schema import get_conn, ensure_db
 
 log = logging.getLogger(__name__)
 
 _MAX_RETRIES = 3
-_RETRY_DELAY = 0.15  # seconds
+_RETRY_DELAY = 0.15
 
 
 @contextmanager
 def _conn():
-    """Open a connection and guarantee it is closed on exit."""
+    """Open a connection and guarantee close on exit."""
+    ensure_db()            # ← THE FIX: tables always exist before any query
     c = get_conn()
     try:
         yield c
@@ -32,7 +39,6 @@ def _conn():
 
 
 def _retry_write(fn):
-    """Decorator: retry DB writes up to _MAX_RETRIES times on lock errors."""
     import functools
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
@@ -52,7 +58,7 @@ def _retry_write(fn):
 def get_user(username: str) -> Optional[dict]:
     with _conn() as c:
         row = c.execute(
-            "SELECT * FROM users WHERE username=?", (username.lower(),)
+            "SELECT * FROM users WHERE username=?", (username.strip().lower(),)
         ).fetchone()
     return dict(row) if row else None
 
@@ -98,14 +104,13 @@ def _sanitise_result(result: dict) -> dict:
     """Strip non-JSON-serialisable fields (DataFrames, numpy scalars)."""
     import numpy as np
     import pandas as pd
-
     clean: dict = {}
     for k, v in result.items():
         if isinstance(v, pd.DataFrame):
             clean[k] = v.to_dict(orient="records") if not v.empty else []
-        elif isinstance(v, (np.integer,)):
+        elif isinstance(v, np.integer):
             clean[k] = int(v)
-        elif isinstance(v, (np.floating,)):
+        elif isinstance(v, np.floating):
             clean[k] = float(v)
         elif isinstance(v, np.ndarray):
             clean[k] = v.tolist()
@@ -116,7 +121,6 @@ def _sanitise_result(result: dict) -> dict:
 
 @_retry_write
 def save_analysis(user_id: int, ticker: str, headline: str, result: dict) -> bool:
-    """Save analysis result. Returns True on success, False on failure."""
     try:
         safe = _sanitise_result(result)
         with _conn() as c:
@@ -171,7 +175,6 @@ def clear_history(user_id: int) -> None:
 
 
 def get_stats(user_id: int) -> dict:
-    """FIX: Always returns a safe dict even when avg_conf is None."""
     with _conn() as c:
         row = c.execute(
             """SELECT
@@ -203,7 +206,6 @@ def get_watchlist(user_id: int) -> list[dict]:
 
 @_retry_write
 def add_watch(user_id: int, ticker: str, company: str = "", notes: str = "") -> bool:
-    """FIX: Returns True only when a new row was actually inserted."""
     try:
         with _conn() as c:
             cur = c.execute(
@@ -211,7 +213,7 @@ def add_watch(user_id: int, ticker: str, company: str = "", notes: str = "") -> 
                 (user_id, ticker.upper(), company, notes),
             )
             c.commit()
-            return cur.rowcount > 0  # True = inserted, False = already existed
+            return cur.rowcount > 0
     except Exception as e:
         log.warning("add_watch failed: %s", e)
         return False

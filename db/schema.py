@@ -1,42 +1,36 @@
 """
 db/schema.py — DDL: table creation, indexes, and user seeding.
-FIX: init_db() uses context manager so connection never leaks on DDL error.
-FIX: ON DELETE CASCADE added to all FK relationships.
-FIX: seed_users() single transaction for atomicity.
-FIX: bootstrap() guarded by module-level flag — DDL runs once per process.
-Passwords read from environment variables; hardcoded fallbacks only in dev.
+
+ROOT CAUSE FIX: The previous _DB_INITIALIZED module-level bool was not thread-safe
+and was not shared across Streamlit reruns on Streamlit Cloud workers.
+Every DB operation now calls ensure_db() which uses a threading.Lock so init
+truly runs once per process even under concurrent reruns.
+
+DB PATH: /tmp/finance_impact.db on Streamlit Cloud (writable, persists within
+a running process). Override with FI_DB_PATH env var for production use.
 """
 from __future__ import annotations
 import os
 import sqlite3
+import threading
 from contextlib import contextmanager
 
-_DB_INITIALIZED = False  # module-level guard: init runs once per process
+_init_lock = threading.Lock()
+_initialized = False          # protected by _init_lock
 
 
 def _db_path() -> str:
-    # Use /tmp on Streamlit Cloud (ephemeral but survives within a session).
-    # Fall back to local data/ dir for local dev.
-    env_path = os.environ.get("FI_DB_PATH", "")
-    if env_path:
-        os.makedirs(os.path.dirname(env_path), exist_ok=True)
-        return env_path
-    tmp_path = "/tmp/finance_impact.db"
-    # If running on Streamlit Cloud, /tmp is writable and shared within the process
-    try:
-        os.makedirs("/tmp", exist_ok=True)
-        return tmp_path
-    except Exception:
-        root = os.path.dirname(os.path.dirname(__file__))
-        d = os.path.join(root, "data")
-        os.makedirs(d, exist_ok=True)
-        return os.path.join(d, "finance_impact.db")
+    env = os.environ.get("FI_DB_PATH", "")
+    if env:
+        os.makedirs(os.path.dirname(os.path.abspath(env)), exist_ok=True)
+        return env
+    os.makedirs("/tmp", exist_ok=True)
+    return "/tmp/finance_impact.db"
 
 
 @contextmanager
 def _conn_ctx():
-    """Open a SQLite connection and guarantee close on exit (even on error)."""
-    c = sqlite3.connect(_db_path(), check_same_thread=False)
+    c = sqlite3.connect(_db_path(), check_same_thread=False, timeout=20)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA journal_mode=WAL")
     c.execute("PRAGMA foreign_keys=ON")
@@ -47,21 +41,36 @@ def _conn_ctx():
 
 
 def get_conn() -> sqlite3.Connection:
-    """Return a raw connection (caller responsible for closing)."""
-    c = sqlite3.connect(_db_path(), check_same_thread=False)
+    c = sqlite3.connect(_db_path(), check_same_thread=False, timeout=20)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA journal_mode=WAL")
     c.execute("PRAGMA foreign_keys=ON")
     return c
 
 
-def init_db() -> None:
-    """Create all tables and indexes. Safe to call repeatedly (IF NOT EXISTS).
-    FIX: Connection always closed via context manager, even if DDL throws.
+def ensure_db() -> None:
     """
-    global _DB_INITIALIZED
-    if _DB_INITIALIZED:
+    Create tables + seed demo users. True singleton — runs once per process.
+    Safe to call from every single DB function; near-zero cost after first call.
+    Uses threading.Lock + double-checked locking to be safe under concurrent reruns.
+    """
+    global _initialized
+    if _initialized:
         return
+    with _init_lock:
+        if _initialized:
+            return
+        _create_tables()
+        _seed_users()
+        _initialized = True
+
+
+def init_db() -> None:
+    """Backward-compat alias."""
+    ensure_db()
+
+
+def _create_tables() -> None:
     with _conn_ctx() as c:
         c.executescript("""
             CREATE TABLE IF NOT EXISTS users (
@@ -73,7 +82,6 @@ def init_db() -> None:
                 created_at    TEXT    DEFAULT (datetime('now')),
                 last_login    TEXT
             );
-
             CREATE TABLE IF NOT EXISTS analysis_history (
                 id               INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id          INTEGER NOT NULL,
@@ -91,7 +99,6 @@ def init_db() -> None:
                 analyzed_at      TEXT    DEFAULT (datetime('now')),
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
-
             CREATE TABLE IF NOT EXISTS watchlist (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id      INTEGER NOT NULL,
@@ -102,7 +109,6 @@ def init_db() -> None:
                 UNIQUE(user_id, ticker),
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
-
             CREATE TABLE IF NOT EXISTS user_settings (
                 user_id          INTEGER PRIMARY KEY,
                 default_ticker   TEXT    DEFAULT 'TSLA',
@@ -112,7 +118,6 @@ def init_db() -> None:
                 theme            TEXT    DEFAULT 'dark',
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
-
             CREATE TABLE IF NOT EXISTS price_alerts (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id      INTEGER NOT NULL,
@@ -123,7 +128,6 @@ def init_db() -> None:
                 created_at   TEXT    DEFAULT (datetime('now')),
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
-
             CREATE INDEX IF NOT EXISTS idx_history_user
                 ON analysis_history(user_id, analyzed_at DESC);
             CREATE INDEX IF NOT EXISTS idx_watchlist_user
@@ -132,23 +136,39 @@ def init_db() -> None:
                 ON price_alerts(user_id, triggered);
         """)
         c.commit()
-    _DB_INITIALIZED = True
 
 
-def seed_users() -> None:
-    """Seed default accounts. Skips existing users gracefully."""
-    import bcrypt
-    from db.ops import get_user, create_user
-
-    dev_mode = True  # Always seed demo users so credentials always work
+def _seed_users() -> None:
+    """Insert default demo accounts inside the same init transaction."""
+    try:
+        import bcrypt
+    except ImportError:
+        return
     defaults = [
         ("admin", os.environ.get("FI_ADMIN_PASSWORD", "admin123"), "admin@fi.io", "admin"),
         ("demo",  os.environ.get("FI_DEMO_PASSWORD",  "demo1234"), "demo@fi.io",  "user"),
         ("guest", os.environ.get("FI_GUEST_PASSWORD", "guest123"), "",            "user"),
     ]
-    for uname, pwd, email, role in defaults:
-        if pwd is None:
-            continue
-        if not get_user(uname):
-            h = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode()
-            create_user(uname, h, email, role)
+    with _conn_ctx() as c:
+        for uname, pwd, email, role in defaults:
+            exists = c.execute(
+                "SELECT id FROM users WHERE username=?", (uname,)
+            ).fetchone()
+            if not exists:
+                h = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode()
+                c.execute(
+                    "INSERT INTO users (username,password_hash,email,role) VALUES (?,?,?,?)",
+                    (uname, h, email, role),
+                )
+                new_id = c.execute(
+                    "SELECT id FROM users WHERE username=?", (uname,)
+                ).fetchone()["id"]
+                c.execute(
+                    "INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)", (new_id,)
+                )
+        c.commit()
+
+
+def seed_users() -> None:
+    """Backward-compat alias."""
+    _seed_users()
