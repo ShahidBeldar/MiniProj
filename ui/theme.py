@@ -139,45 +139,30 @@ html,body,[class*="css"] {
 .fi-nav-label { flex:1; }
 .fi-sidebar-divider { height:1px; background:var(--b1); margin:.8rem .4rem .5rem; }
 
-/* ■■ SIDEBAR TOGGLE ■■ */
+/* ■■ SIDEBAR — ALWAYS VISIBLE (no JS needed) ■■ */
 
-/* Force sidebar always open — overrides Streamlit's CSS-in-JS translateX.
-   The sidebar styled component uses transform:translateX(-Xpx) to hide.
-   Since it is CSS-in-JS (not inline style), !important overrides it. */
-section[data-testid="stSidebar"] {
-  transform: none !important;
-  min-width: 244px !important;
-  max-width: 244px !important;
+/* Force sidebar open by overriding Streamlit's collapse transform.
+   When collapsed, Streamlit sets translateX(-110%). We override it to 0. */
+[data-testid="stSidebar"] {
+  transform: translateX(0) !important;
+  min-width: 240px !important;
+  width: 240px !important;
   visibility: visible !important;
+  display: flex !important;
+}
+[data-testid="stSidebar"][aria-expanded="false"] {
+  transform: translateX(0) !important;
+  min-width: 240px !important;
+  width: 240px !important;
 }
 
-/* ── RE-OPEN BUTTON (stExpandSidebarButton lives in the page header) ── */
-[data-testid="stExpandSidebarButton"] button {
-  width:36px!important; height:36px!important;
-  background:#00C8F0!important;
-  border:none!important; border-radius:50%!important;
-  display:flex!important; align-items:center!important;
-  justify-content:center!important; cursor:pointer!important;
-  box-shadow:0 0 12px rgba(0,200,240,.4)!important;
-}
-[data-testid="stExpandSidebarButton"] button svg {
-  color:#000!important; width:20px!important; height:20px!important;
-}
+/* Hide the collapse/expand toggle buttons — sidebar is always open */
+[data-testid="collapsedControl"] { display:none!important; }
+[data-testid="stSidebarCollapseButton"] { display:none!important; }
 
-/* ── CLOSE BUTTON (stSidebarCollapseButton lives inside the sidebar header) ── */
-[data-testid="stSidebarCollapseButton"] button {
-  border:1px solid #1A2535!important; border-radius:50%!important;
-  background:transparent!important;
-  width:30px!important; height:30px!important;
-  display:flex!important; align-items:center!important;
-  justify-content:center!important; cursor:pointer!important;
-  transition:border-color .15s!important;
-}
-[data-testid="stSidebarCollapseButton"] button:hover {
-  border-color:#3D5268!important;
-}
-[data-testid="stSidebarCollapseButton"] button svg {
-  color:#7A92A8!important; width:18px!important; height:18px!important;
+/* Adjust main content so it doesn't go under the always-open sidebar */
+.main .block-container {
+  padding-left: 1.5rem !important;
 }
 
 /* ■■ LAYOUT ■■ */
@@ -224,29 +209,8 @@ label,.stTextInput label,.stTextArea label,.stSelectbox label,.stToggle label { 
 .stAlert { border-radius:10px!important; font-family:var(--f-body)!important; font-size:.8rem!important; }
 [data-testid="stExpander"] { background:var(--panel)!important; border:1px solid var(--b1)!important; border-radius:var(--radius)!important; }
 [data-testid="stExpander"] summary { font-family:var(--f-body)!important; font-size:.84rem!important; font-weight:500!important; }
-/* Hide the text label on expander arrows (Streamlit renders icon name as text) */
-/* Expander toggle arrow — rendered as a Material Symbols ligature span.
-   Ensure the font is applied and the span doesn't show raw icon-name text. */
-[data-testid="stExpander"] details > summary {
-  list-style: none !important;
-}
-[data-testid="stExpander"] details > summary > span:first-child {
-  font-family: "Material Symbols Rounded" !important;
-  font-size: 1.3rem !important;
-  font-variation-settings: 'FILL' 0, 'wght' 300 !important;
-  line-height: 1 !important;
-  letter-spacing: normal !important;
-  text-transform: none !important;
-  white-space: nowrap !important;
-  word-wrap: normal !important;
-  direction: ltr !important;
-  -webkit-font-feature-settings: 'liga' !important;
-  font-feature-settings: 'liga' !important;
-  color: #7A92A8 !important;
-  min-width: 1.3rem !important;
-  display: inline-flex !important;
-  align-items: center !important;
-}
+[data-testid="stExpander"] summary span[data-testid="stExpanderToggleIcon"] { font-size:0!important; }
+[data-testid="stExpander"] summary span[data-testid="stExpanderToggleIcon"] svg { display:block!important; width:1rem!important; height:1rem!important; }
 [data-testid="stForm"] { background:var(--bg3)!important; border:1px solid var(--b1)!important; border-radius:var(--radius)!important; }
 [data-testid="stDownloadButton"]>button { background:transparent!important; color:var(--accent)!important; border:1px solid rgba(0,200,240,.25)!important; box-shadow:none!important; }
 [data-testid="stDownloadButton"]>button:hover { background:rgba(0,200,240,.05)!important; transform:none!important; }
